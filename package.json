@@ -1,0 +1,10 @@
+{
+  "name": "kinnikuman-api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "KinnikumanAPI — PokéAPI inspired",
+  "scripts": {
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev"
+  }
+}
