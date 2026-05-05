@@ -283,3 +283,99 @@ many の場合は逆方向の one 定義から自動推測されます。
 4. 中間テーブルに「関係そのものの情報」を持たせる必要はあるか?
 5. 同じ実体を2つのテーブルに分けてないか?
 6. 繰り返し参照される値(シリーズ名、軍団名など)はテーブル化されているか?
+
+---
+
+## マイグレーション
+
+### マイグレーションとは
+
+- スキーマ変更を SQL に変換して DB に適用する仕組み
+- `schema.ts`(設計図) → `CREATE TABLE` 等の SQL → DB に反映
+- 履歴がファイルとして残る、複数環境で再現可能、Git で共有可能
+
+### Drizzle Kit のコマンド
+
+| コマンド               | 用途                                                  |
+| ---------------------- | ----------------------------------------------------- |
+| `drizzle-kit generate` | SQL マイグレーションファイルを生成(DB には反映しない) |
+| `drizzle-kit migrate`  | 生成済み SQL を DB に適用                             |
+| `drizzle-kit push`     | スキーマを直接 DB に反映(SQL ファイルは作らない)      |
+
+- 開発初期・学習: `push` がラク
+- 本番運用・チーム開発: `generate` + `migrate` で履歴管理
+
+### package.json のスクリプト
+
+```json
+"db:push": "drizzle-kit push",
+"db:studio": "drizzle-kit studio"
+```
+
+---
+
+## Drizzle Studio
+
+- DB の中身を GUI で見られるツール(Drizzle Kit 同梱)
+- `pnpm db:studio` → ブラウザで `https://local.drizzle.studio` を開く
+- ローカルからデータは出ない(公式ドメイン経由でローカルにアクセスする仕組み)
+- データの追加・編集・削除、SQL 実行が可能
+- スキーマと連動しているので外部 GUI ツール (DBeaver 等) より楽
+
+---
+
+## 整合性チェック(外部キー制約)
+
+- `references()` を書いておくと、不正なデータは DB が拒否してくれる
+- 例: 存在しない `choujin_id` を `choujin_faction` に入れようとすると
+  → `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`
+- アプリ側のバグで変な値が入ろうとしても、最後の砦として DB が止める
+
+### 外部キー有効化の確認
+
+```bash
+turso db shell <db_name>
+```
+
+```sql
+PRAGMA foreign_keys;   -- 1 なら ON、0 なら OFF
+```
+
+---
+
+## Turso CLI 操作メモ
+
+```bash
+turso auth login                    # 再ログイン
+turso auth whoami                   # 現在のユーザー確認
+turso db shell <db_name>            # DB シェル起動
+turso db show <db_name> --url       # 接続 URL 取得
+turso db tokens create <db_name>    # 認証トークン発行
+```
+
+### SQLite シェルのコマンド(`.` で始まる)
+
+- `.tables` — テーブル一覧
+- `.schema <table_name>` — テーブル定義(CREATE 文)を表示
+- `.quit` — シェルを抜ける
+
+---
+
+## ハマりポイント(マイグレーション編)
+
+- `TURSO_DATABASE_URL is not defined` → `.env` の場所/中身を確認
+  - `=` の前後にスペース不要、値はクォートで囲まない
+- `db:push` 実行時の確認画面で「データを失う可能性」と出ても、開発初期で空ならOK
+- `turso db tokens create` を叩くたびに新トークン発行(古いものも有効なまま)
+- Turso CLI のセッションは時間で切れることがある → `turso auth login` で再ログイン
+
+---
+
+## 開発フローの定番
+
+1. `schema.ts` を編集
+2. `pnpm db:push` で DB に反映
+3. `pnpm db:studio` で目視確認
+4. `pnpm dev` で API サーバー起動
+
+→ Studio とサーバーは別タブで立てっぱなしが快適
