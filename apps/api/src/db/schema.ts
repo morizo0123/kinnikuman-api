@@ -40,9 +40,7 @@ export const choujinFaction = sqliteTable(
       .notNull()
       .references(() => faction.id, { onDelete: 'cascade' })
   },
-  (table) => ({
-    pk: primaryKey({ columns: [table.choujinId, table.factionId] })
-  })
+  (table) => [primaryKey({ columns: [table.choujinId, table.factionId] })]
 );
 
 // ===== リレーション定義(Drizzleクエリで JOIN するため) =====
