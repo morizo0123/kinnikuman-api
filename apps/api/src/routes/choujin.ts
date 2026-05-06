@@ -1,22 +1,39 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { choujin } from '../db/schema.js';
+import {
+  parsePaginationParams,
+  buildPaginatedResponse
+} from '../lib/pagination.js';
 
 const app = new Hono();
 
-// GET /api/v1/choujin - 超人一覧
+// GET /api/v1/choujin - 超人一覧(ページネーション付き)
 app.get('/', async (c) => {
-  const rows = await db.select().from(choujin);
+  const { limit, offset } = parsePaginationParams(c);
 
-  return c.json({
-    count: rows.length,
-    results: rows.map((row) => ({
-      slug: row.slug,
-      name: row.name,
-      url: `/api/v1/choujin/${row.slug}`
-    }))
-  });
+  // 全件数を取得
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(choujin);
+
+  // ページ分のデータを取得
+  const rows = await db.select().from(choujin).limit(limit).offset(offset);
+
+  return c.json(
+    buildPaginatedResponse({
+      baseUrl: '/api/v1/choujin',
+      count,
+      limit,
+      offset,
+      results: rows.map((row) => ({
+        slug: row.slug,
+        name: row.name,
+        url: `/api/v1/choujin/${row.slug}`
+      }))
+    })
+  );
 });
 
 // GET /api/v1/choujin/:slug - 超人詳細

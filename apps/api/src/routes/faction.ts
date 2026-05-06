@@ -1,22 +1,38 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { faction } from '../db/schema.js';
+import {
+  parsePaginationParams,
+  buildPaginatedResponse
+} from '../lib/pagination.js';
 
 const app = new Hono();
 
-// GET /api/v1/faction - 軍団一覧
+// GET /api/v1/faction - 軍団一覧(ページネーション付き)
 app.get('/', async (c) => {
-  const rows = await db.select().from(faction);
+  const { limit, offset } = parsePaginationParams(c);
 
-  return c.json({
-    count: rows.length,
-    results: rows.map((row) => ({
-      slug: row.slug,
-      name: row.name,
-      url: `/api/v1/faction/${row.slug}`
-    }))
-  });
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(faction);
+
+  // ページ分のデータを取得
+  const rows = await db.select().from(faction).limit(limit).offset(offset);
+
+  return c.json(
+    buildPaginatedResponse({
+      baseUrl: '/api/v1/faction',
+      count,
+      limit,
+      offset,
+      results: rows.map((row) => ({
+        slug: row.slug,
+        name: row.name,
+        url: `/api/v1/faction/${row.slug}`
+      }))
+    })
+  );
 });
 
 // GET /api/v1/faction/:slug - 軍団詳細
