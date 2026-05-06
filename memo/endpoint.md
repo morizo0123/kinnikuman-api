@@ -182,3 +182,69 @@ curl -s http://localhost:3000/api/v1/choujin | jq .
 2. `app.get(path, handler)` でルート定義
 3. `index.ts` で `app.route('/api/v1/...', router)` でマウント
 4. `pnpm dev` で自動再起動 → curl で確認
+
+---
+
+## 多対多の対称性
+
+同じリレーションは**両方向から辿れる**:
+
+choujin ⇔ choujin_faction ⇔ faction
+
+- `GET /api/v1/choujin/:slug` → 超人から所属軍団を辿る
+- `GET /api/v1/faction/:slug` → 軍団から所属超人を辿る
+
+実装も**ほぼ鏡写し**になる:
+
+```ts
+// 超人詳細
+db.query.choujin.findFirst({
+  where: eq(choujin.slug, slug),
+  with: { factions: { with: { faction: true } } }
+});
+
+// 軍団詳細(プロパティ名と参照先テーブルが入れ替わるだけ)
+db.query.faction.findFirst({
+  where: eq(faction.slug, slug),
+  with: { choujins: { with: { choujin: true } } }
+});
+```
+
+`schema.ts` の `relations()` で両側に `many()` を書いているおかげで、双方向が辿れる。
+
+---
+
+## ルーター追加の流れ (新リソース)
+
+新しいリソース(例: faction)を追加するとき:
+
+1. `src/routes/<resource>.ts` を作成
+2. 一覧と詳細のハンドラを書く
+3. `src/index.ts` で `app.route('/api/v1/<resource>', router)` でマウント
+
+→ 既存リソースに影響なく、**ファイルを足すだけで API が広がる**
+
+---
+
+## レスポンス命名の慣習
+
+- 配列名は **複数形** が JS/JSON の慣習(`choujins`, `factions`)
+- 日本語ベースの単語(choujin)でも、配列なら複数形で揃えるとフロント側で扱いやすい
+- PokéAPI では `forms`(複数形)と `pokemon_species`(複数形にしない)が混在 → **プロジェクト内で統一されていれば何でもOK**
+
+---
+
+## 動作確認パターン (各エンドポイントで実施)
+
+```bash
+# 一覧
+curl -s http://localhost:3000/api/v1/<resource> | jq .
+
+# 詳細
+curl -s http://localhost:3000/api/v1/<resource>/<slug> | jq .
+
+# 404 確認
+curl -i http://localhost:3000/api/v1/<resource>/nonexistent
+```
+
+新エンドポイントを作ったら、必ず**成功・404 の両方**を確認する習慣を。
