@@ -18,22 +18,27 @@ export function parsePaginationParams(c: Context) {
  * ページネーション付きレスポンスを組み立てる
  */
 export function buildPaginatedResponse<T>(params: {
-  baseUrl: string; // 例: '/api/v1/choujin'
-  count: number; // 全件数
+  baseUrl: string;
+  count: number;
   limit: number;
   offset: number;
   results: T[];
 }) {
   const { baseUrl, count, limit, offset, results } = params;
 
+  // baseUrl に既に ? がある場合は &、なければ ? を使う
+  const separator = baseUrl.includes('?') ? '&' : '?';
+
   const next =
     offset + limit < count
-      ? `${baseUrl}?limit=${limit}&offset=${offset + limit}`
+      ? `${baseUrl}${separator}limit=${limit}&offset=${offset + limit}`
       : null;
 
   const previousOffset = Math.max(offset - limit, 0);
   const previous =
-    offset > 0 ? `${baseUrl}?limit=${limit}&offset=${previousOffset}` : null;
+    offset > 0
+      ? `${baseUrl}${separator}limit=${limit}&offset=${previousOffset}`
+      : null;
 
   return { count, next, previous, results };
 }
