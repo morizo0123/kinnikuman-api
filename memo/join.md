@@ -31,10 +31,10 @@ choujin                  choujin_faction
 ┌────┬──────────┬──────────┬──────────┐
 │ id │ name     │choujin_id│faction_id│
 ├────┼──────────┼──────────┼──────────┤
-│  3 │キン肉マン│    3     │    1     │  ← (キン肉マン, seigi)
-│  3 │キン肉マン│    3     │    2     │  ← (キン肉マン, idol)
-│  4 │テリーマン│    4     │    1     │  ← (テリーマン, seigi)
-│  4 │テリーマン│    4     │    2     │  ← (テリーマン, idol)
+│  3 │ キン肉マン │    3     │    1     │  ← (キン肉マン, seigi)
+│  3 │ キン肉マン │    3     │    2     │  ← (キン肉マン, idol)
+│  4 │ テリーマン │    4     │    1     │  ← (テリーマン, seigi)
+│  4 │ テリーマン │    4     │    2     │  ← (テリーマン, idol)
 └────┴──────────┴──────────┴──────────┘
 ```
 
@@ -65,10 +65,10 @@ choujin
 ┌────┬──────────┬──────────┬──────────┬────┬───────┐
 │ id │ name     │choujin_id│faction_id│ id │ slug  │
 ├────┼──────────┼──────────┼──────────┼────┼───────┤
-│  3 │キン肉マン│    3     │    1     │  1 │ seigi │
-│  3 │キン肉マン│    3     │    2     │  2 │ idol  │
-│  4 │テリーマン│    4     │    1     │  1 │ seigi │
-│  4 │テリーマン│    4     │    2     │  2 │ idol  │
+│  3 │ キン肉マン │    3     │    1     │  1 │ seigi │
+│  3 │ キン肉マン │    3     │    2     │  2 │ idol  │
+│  4 │ テリーマン │    4     │    1     │  1 │ seigi │
+│  4 │ テリーマン │    4     │    2     │  2 │ idol  │
 └────┴──────────┴──────────┴──────────┴────┴───────┘
 ```
 
@@ -78,12 +78,29 @@ choujin
 
 `WHERE faction.slug = 'seigi'` で seigi の行だけ残す:
 
+```
 ┌────┬──────────┬──────────┬──────────┬────┬───────┐
-│ 3 │キン肉マン│ 3 │ 1 │ 1 │ seigi │
-│ 4 │テリーマン│ 4 │ 1 │ 1 │ seigi │
+│ id │ name     │choujin_id│faction_id│ id │ slug  │
+├────┼──────────┼──────────┼──────────┼────┼───────┤
+│  3 │ キン肉マン │    3     │    1     │  1 │ seigi │
+│  4 │ テリーマン │    4     │    1     │  1 │ seigi │
 └────┴──────────┴──────────┴──────────┴────┴───────┘
+```
 
 最後に欲しい列だけ取り出す `SELECT choujin.id`:
+
+```ts
+.select({ id: choujin.id })
+```
+
+```
+┌────┐
+│ id │
+├────┤
+│  3 │
+│  4 │
+└────┘
+```
 
 [3, 4]
 
@@ -148,11 +165,11 @@ const ids = await db
   .where(eq(faction.slug, factionSlug)); // ← 絞り込み
 ```
 
-1 from(choujin) — choujin テーブルを起点に
-2 .innerJoin(choujinFaction, ...) — choujin_faction を横に繋ぐ
-3 .innerJoin(faction, ...) — さらに faction を横に繋ぐ
-4 .where(eq(faction.slug, factionSlug)) — slug が 'seigi' の行だけ残す
-5 .select({ id: choujin.id }) — choujin.id だけ取り出す
+1. from(choujin) — choujin テーブルを起点に
+2. .innerJoin(choujinFaction, ...) — choujin_faction を横に繋ぐ
+3. .innerJoin(faction, ...) — さらに faction を横に繋ぐ
+4. .where(eq(faction.slug, factionSlug)) — slug が 'seigi' の行だけ残す
+5. .select({ id: choujin.id }) — choujin.id だけ取り出す
 
 読む順番に書くのが Drizzle の良いところ(SQL は SELECT が先に来るけど、Drizzle は最後でも書ける)。
 
@@ -174,10 +191,10 @@ FULL: JOIN両方の全部
 
 ## まとめ
 
-`from(choujin)`: 起点
-`innerJoin(choujinFaction, ON ...)`: 中間テーブルと横に繋ぐ
-`innerJoin(faction, ON ...)`: 軍団テーブルとも横に繋ぐ
-`where(eq(faction.slug, 'seigi'))`: seigi の行だけ残す
-`select({ id: choujin.id })`: choujin.id 列だけ取る
+- `from(choujin)`: 起点
+- `innerJoin(choujinFaction, ON ...)`: 中間テーブルと横に繋ぐ
+- `innerJoin(faction, ON ...)`: 軍団テーブルとも横に繋ぐ
+- `where(eq(faction.slug, 'seigi'))`: seigi の行だけ残す
+- `select({ id: choujin.id })`: choujin.id 列だけ取る
 
 3つのテーブルを横にくっつけて、条件で絞って、欲しい列だけ取る。地図上で道を辿る感覚に近いです。
