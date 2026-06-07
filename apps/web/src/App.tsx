@@ -1,39 +1,38 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchChoujinList } from './api/client';
-import { Button } from '@/components/ui/button';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { Home } from './pages/Home';
+import { About } from './pages/About';
+import { Docs } from './pages/Docs';
 
 function App() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['choujin', 'list'],
-    queryFn: () => fetchChoujinList()
-  });
-
-  if (isLoading) return <div style={{ padding: 20 }}>Loading...</div>;
-  if (error) return <div style={{ padding: 20 }}>Error: {error.message}</div>;
-  if (!data) return null;
-
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold text-blue-600">🦸 KinnikumanAPI</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Total: {data.count} choujin
-      </p>
+    <BrowserRouter>
+      {/* ヘッダー */}
+      <header className="border-b">
+        <Link to="/" className="font-bold hover:underline">
+          🦸 KinnikumanAPI
+        </Link>
+        <div className="flex gap-4 ml-auto">
+          <Link to="/" className="hover:underline">
+            Home
+          </Link>
+          <Link to="/docs" className="hover:underline">
+            Docs
+          </Link>
+          <Link to="/about" className="hover:underline">
+            About
+          </Link>
+        </div>
+      </header>
 
-      <div className="flex gap-2 mb-6">
-        <Button variant="default">Default Button</Button>
-        <Button variant="outline">Outline</Button>
-        <Button variant="ghost">Ghost</Button>
-      </div>
-
-      <ul className="space-y-2">
-        {data.results.map((c) => (
-          <li key={c.slug} className="border rounded-md p-3 hover:bg-accent">
-            <strong>{c.name}</strong>{' '}
-            <span className="text-sm text-muted-foreground">({c.slug})</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+      {/* ページ本体 */}
+      <main>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/docs" element={<Docs />} />
+        </Routes>
+      </main>
+    </BrowserRouter>
   );
 }
 
