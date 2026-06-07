@@ -1,21 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fetchChoujinList } from './api/client';
-import type { ChoujinListItem, PaginatedResponse } from './api/types';
 
 function App() {
-  const [data, setData] = useState<PaginatedResponse<ChoujinListItem> | null>(
-    null
-  );
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['choujin', 'list'],
+    queryFn: () => fetchChoujinList()
+  });
 
-  useEffect(() => {
-    fetchChoujinList()
-      .then(setData)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <div style={{ padding: 20 }}>Error: {error}</div>;
-  if (!data) return <div style={{ padding: 20 }}>Loading...</div>;
+  if (isLoading) return <div style={{ padding: 20 }}>Loading...</div>;
+  if (error) return <div style={{ padding: 20 }}>Error: {error.message}</div>;
+  if (!data) return null;
 
   return (
     <div style={{ padding: 20, fontFamily: 'system-ui' }}>
