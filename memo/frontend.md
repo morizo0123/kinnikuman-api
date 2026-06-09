@@ -246,3 +246,259 @@ return <ul>{data.results.map(c => <li key={c.slug}>{c.name}</li>)}</ul>
 - `useEffect` + `useState` でデータ取得の最小パターン
 - ローディング/エラー状態の手書きが必要 → ボイラープレートが多い
 - → 次フェーズで TanStack Query 導入して圧縮予定
+
+---
+
+## Tailwind CSS
+
+### v4 のセットアップ (Vite)
+
+```bash
+pnpm add -D tailwindcss @tailwindcss/vite
+```
+
+`vite.config.ts`:
+
+```ts
+import tailwindcss from '@tailwindcss/vite';
+export default defineConfig({
+  plugins: [react(), tailwindcss()]
+});
+```
+
+`src/index.css`:
+
+```css
+@import 'tailwindcss';
+```
+
+### v3 との違い
+
+- v3: `tailwind.config.js` + PostCSS 設定が必要
+- v4: Vite プラグインだけで OK、設定ファイル不要
+- インポートは `@import "tailwindcss"` 1行
+
+---
+
+## shadcn/ui
+
+### 思想
+
+- 「UI ライブラリ」ではなく「Radix + Tailwind のコピペ集」
+- コンポーネントをプロジェクトにコピーする方式
+- 中身を読める / 変更できる / 依存に縛られない
+
+### 構造
+
+shadcn/ui = Radix UI (挙動・アクセシビリティ) + Tailwind (見た目)
+
+- Radix = ヘッドレス UI ライブラリ(キーボード操作、スクリーンリーダー対応など)
+- shadcn = その上に Tailwind で見た目を載せた完成品
+
+### セットアップ
+
+```bash
+pnpm dlx shadcn@latest init
+```
+
+- Component library: Radix
+- Preset: Nova(無難)
+- CSS variables: Yes
+
+### コンポーネント追加
+
+```bash
+pnpm dlx shadcn@latest add button
+```
+
+→ `src/components/ui/button.tsx` が生成される(自分のコード扱い)
+
+### `variant` プロパティ
+
+- `default` / `outline` / `ghost` / `destructive` / `link`
+- `cva()`(class-variance-authority) で variant ごとの class が定義されている
+
+### パスエイリアス `@/`
+
+- `vite.config.ts` の `resolve.alias` で `@` を `./src` に
+- `tsconfig.json` と `tsconfig.app.json` の両方に `paths` を書く
+- shadcn が `@/components/ui/...` 形式で import を生成する
+
+### Tailwind v4 でよく使うクラス
+
+- 余白: `p-6`, `mb-4`, `space-y-2`, `gap-4`
+- レイアウト: `flex flex-col`, `max-w-3xl mx-auto`, `flex-1`
+- 色: `text-muted-foreground`, `bg-accent`, `bg-background`
+  - shadcn の CSS 変数なのでテーマ変更で一括変更可能
+- ホバー: `hover:bg-accent`, `hover:underline`
+- 位置: `sticky top-0`, `z-10`
+
+---
+
+## React Router
+
+### 採用理由
+
+- TanStack Router も型安全で良いが、情報量で React Router 圧勝
+- 学習プロジェクトは情報量重視
+
+### インストール
+
+```bash
+pnpm add react-router-dom
+```
+
+### 基本構造
+
+```tsx
+<BrowserRouter>
+  <Routes>
+    <Route path="/" element={<Home />} />
+    <Route path="/about" element={<About />} />
+  </Routes>
+</BrowserRouter>
+```
+
+- `<BrowserRouter>` — URL を監視、History API で SPA 遷移
+- `<Routes>` — 中のルートから1つだけマッチして描画
+- `<Route path element>` — パスとコンポーネントの対応
+
+### `<Link>` vs `<a>`
+
+- `<Link to="/about">` — **SPA 内ナビ、再読み込みなし**(状態保持)
+- `<a href="/about">` — ページ全体リロード(SPA では NG)
+- SPA 内のリンクは必ず `<Link>` を使う
+
+### `<NavLink>` で active 判定
+
+```tsx
+<NavLink
+  to="/docs"
+  end
+  className={({ isActive }) =>
+    isActive ? 'active-class' : 'normal-class'
+  }
+>
+```
+
+- 現在ページのリンクを強調表示できる
+- `end` を付けると完全一致時のみ active
+  - 付けないと `/` が全ページで active 扱いになる(全URLが `/` で始まるため)
+
+### ネストルートと `<Outlet />`
+
+レイアウト共通化のパターン:
+
+```tsx
+<Route element={<Layout />}>
+  <Route path="/" element={<Home />} />
+  <Route path="/about" element={<About />} />
+</Route>
+```
+
+`Layout` 内で:
+
+```tsx
+<Header />
+<Outlet />   {/* ← ここに子ページが入る */}
+<Footer />
+```
+
+- 親レイアウト(Header/Footer)はページ遷移しても変わらない
+- `<Outlet />` の中身だけが切り替わる
+- これが SPA の典型的な構造
+
+### 直接アクセス
+
+- `http://localhost:5173/about` を URL バーに直打ち → SPA でも対応可能
+- BrowserRouter が history を見て初回描画してくれる
+
+---
+
+## レイアウト設計
+
+### Sticky Footer パターン
+
+```tsx
+<div className="min-h-screen flex flex-col">
+  <Header />
+  <main className="flex-1">
+    <Outlet />
+  </main>
+  <Footer />
+</div>
+```
+
+- 中身が短くてもフッターが画面下部に張り付く
+- `flex-1` で main が残りスペースを全部使う
+
+### Sticky ヘッダー
+
+```tsx
+<header className="sticky top-0 bg-background z-10">
+```
+
+- スクロールしても画面上部に追従
+- `bg-background` を忘れると透けて見にくい
+- `z-10` で重なり順を上に
+
+---
+
+## 外部リンクの基本マナー
+
+```tsx
+<a
+  href="https://example.com"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+```
+
+- `target="_blank"` — 新規タブ
+- `rel="noopener noreferrer"` — セキュリティ対策
+  - `noopener`: 新タブから元タブを操作されない
+  - `noreferrer`: リファラ送らない
+- 外部リンクには必ずセット
+
+---
+
+## デザイン作り込みの順序
+
+Phase 5 骨格(レイアウト・ルーティング)
+Phase 6 中身(データ表示、機能実装)
+Phase 7 デザイン仕上げ(色・フォント・余白・アニメーション)
+
+- 機能が固まる前にデザインしても作り直しになる
+- 「読める・触れる」レベルで一旦進めて、最後に整える
+- shadcn は CSS 変数ベースなので、後からテーマ変更が容易
+
+### Phase 7 で参考にしたいサイト
+
+- PokéAPI — シンプル、参考にしやすい
+- Stripe API Docs — プロ仕様、左サイドバー型
+- Vercel Docs — モダン、スペーシングが綺麗
+- Hono Docs — 簡潔
+- shadcn/ui 公式 — ショーケース
+
+---
+
+## ハマりポイント
+
+### shadcn init で「No import alias found」
+
+- `tsconfig.json` と `tsconfig.app.json` の両方に `paths` を書く必要あり
+- `vite.config.ts` の `resolve.alias` も必要
+
+### Tailwind 入れた直後はスタイルが消える
+
+- 既存 CSS がリセットされるため
+- shadcn 入れて class を使い始めれば整う
+
+### `<Link>` を忘れて `<a>` にすると全リロード
+
+- React Query キャッシュも消える
+- 一見動くが、SPA の旨味を失う
+
+### NavLink で `/` が常に active
+
+- `end` プロパティを付けて完全一致にする

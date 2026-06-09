@@ -9,10 +9,10 @@ export function Home() {
         PokéAPI に着想を得て作りました。
       </p>
       <p>
-        詳しい使い方は{' '}
+        詳しい使い方は
         <Link to="/docs" className="underline">
           Docs
-        </Link>{' '}
+        </Link>
         をご覧ください。
       </p>
     </div>
