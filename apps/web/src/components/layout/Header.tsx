@@ -22,7 +22,7 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
-      end
+      end={to === '/'}
       className={({ isActive }) =>
         `px-3 py-1.5 rounded-md text-sm transition-colors ${
           isActive

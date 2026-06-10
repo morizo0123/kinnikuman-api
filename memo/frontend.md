@@ -464,9 +464,11 @@ pnpm add react-router-dom
 
 ## デザイン作り込みの順序
 
+```
 Phase 5 骨格(レイアウト・ルーティング)
 Phase 6 中身(データ表示、機能実装)
 Phase 7 デザイン仕上げ(色・フォント・余白・アニメーション)
+```
 
 - 機能が固まる前にデザインしても作り直しになる
 - 「読める・触れる」レベルで一旦進めて、最後に整える
@@ -502,3 +504,134 @@ Phase 7 デザイン仕上げ(色・フォント・余白・アニメーショ�
 ### NavLink で `/` が常に active
 
 - `end` プロパティを付けて完全一致にする
+
+---
+
+## React Router 応用パターン
+
+### 入れ子レイアウト(Outlet の二重化)
+
+複数階層のレイアウトを綺麗に書ける:
+
+---
+
+## React Router 応用パターン
+
+### 入れ子レイアウト(Outlet の二重化)
+
+複数階層のレイアウトを綺麗に書ける:
+
+```tsx
+<Route element={<Layout />}>
+  // 外側: Header/Footer
+  <Route path="/" element={<Home />} />
+  <Route path="/docs" element={<DocsLayout />}>
+    // 内側: Sidebar
+    <Route path="choujin" element={<ChoujinDocs />} />
+    <Route path="faction" element={<FactionDocs />} />
+  </Route>
+</Route>
+```
+
+- `Layout` の `<Outlet />` に `DocsLayout` が入る
+- `DocsLayout` の `<Outlet />` に `ChoujinDocs` / `FactionDocs` が入る
+- 三層構造でも、各レイヤーは「自分の Outlet」だけ気にすればいい
+
+### index ルートと Navigate でデフォルトリダイレクト
+
+```tsx
+<Route path="/docs" element={<DocsLayout />}>
+  <Route index element={<Navigate to="/docs/choujin" replace />} />
+  <Route path="choujin" element={<ChoujinDocs />} />
+</Route>
+```
+
+- `index` = 親パスと完全一致したとき(`/docs`)に表示するルート
+- `<Navigate to="..." replace />` でリダイレクト
+- `replace` を付けると履歴を置き換える(戻るボタンで `/docs` に戻れない)
+- 「`/docs` に来たら自動で `/docs/choujin` を表示」のような実装に使う
+
+---
+
+## URL に状態を乗せる原則
+
+サイドバーの選択状態を `useState` で持つ vs URL で持つ:
+
+| 方式     | 共有 | ブックマーク | 戻る/進む | リロード保持 |
+| -------- | :--: | :----------: | :-------: | :----------: |
+| useState |  ❌  |      ❌      |    ❌     |      ❌      |
+| URL      |  ✅  |      ✅      |    ✅     |      ✅      |
+
+→ **可能な限り URL に状態を乗せる**のが Web アプリの基本原則
+→ サイドバーの選択、フィルタ条件、ページ番号 etc. は URL に出す
+
+---
+
+## NavLink の `end` プロパティ
+
+### 動作
+
+- `end={true}` — URL が**完全一致**したときだけ active
+- `end={false}` — URL が**前方一致**したときも active(デフォルト)
+
+### `/` だけ特殊な扱いが必要
+
+| リンク                     | end   |        `/docs/choujin` を開いたとき active?         |
+| -------------------------- | ----- | :-------------------------------------------------: |
+| `<NavLink to="/" end>`     | true  |         ❌(完全一致しない) → これが期待動作         |
+| `<NavLink to="/" />`       | false |    ✅(前方一致) → 全ページで active になっちゃう    |
+| `<NavLink to="/docs" />`   | false |               ✅(前方一致) → 期待動作               |
+| `<NavLink to="/docs" end>` | true  | ❌(完全一致しない) → サブページで active にならない |
+
+### Home だけ end、他は前方一致
+
+```tsx
+function NavItem({ to, children }) {
+  return (
+    <NavLink to={to} end={to === '/'}>
+      {children}
+
+  )
+}
+```
+
+#### `end={to === '/'}` の読み方
+
+1. `to === '/'` は比較式 → **true / false を返す**
+2. JSX の `{}` は **式の値を prop に渡す**
+3. 結果: Home (`/`) だけ `end={true}`、他は `end={false}`
+
+冗長に書くと:
+
+```tsx
+end={to === '/' ? true : false}  // 三項演算子(冗長)
+end={Boolean(to === '/')}         // 明示的(不要)
+end={to === '/'}                  // ベスト
+```
+
+- 比較演算子は最初から boolean を返す → ラップ不要
+
+---
+
+## Flexbox の罠と対策
+
+### `min-w-0` で「子要素はみ出し問題」を回避
+
+- Flex アイテムはデフォルトで `min-width: auto`
+- 中身が長いコンテンツ(長文、コードブロック、長い URL など)を入れると、**親を押し広げる**
+- `min-w-0` で「縮んでも良い」を明示
+
+特に長い JSON をコードブロックで表示するページでよく踏む。
+
+### `shrink-0` で「縮ませない」を明示
+
+- Flex は中身の余白が足りないと、各アイテムを縮めようとする
+- サイドバーのような「固定幅」要素には `shrink-0` を付ける
+
+---
+
+## Sticky 要素を重ねるときの注意
+
+- Sticky ヘッダー(`top-0`)とサイドバー(`top-20`)を併用するとき
+- サイドバーの `top` をヘッダー高さ分ずらさないと、ヘッダーの裏に潜り込む
+- ヘッダーには `z-10` で重なり順を上に
