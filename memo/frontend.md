@@ -635,3 +635,204 @@ end={to === '/'}                  // ベスト
 - Sticky ヘッダー(`top-0`)とサイドバー(`top-20`)を併用するとき
 - サイドバーの `top` をヘッダー高さ分ずらさないと、ヘッダーの裏に潜り込む
 - ヘッダーには `z-10` で重なり順を上に
+
+---
+
+## ドキュメントページの構築
+
+### 共通コンポーネント化の方針
+
+複数の API エンドポイントを表示するページでは、繰り返しを減らすため共通部品を作る:
+
+- `<CodeBlock>` — JSON 表示 + コピー機能
+- `<EndpointCard>` — エンドポイント1つ分(URL・説明・パラメータ・サンプル)
+
+これで Choujin、Faction、将来の technique など、リソースが増えても同じパターンで書き足せる。
+
+---
+
+## CodeBlock の実装ポイント
+
+### Clipboard API
+
+```ts
+await navigator.clipboard.writeText(code);
+```
+
+- ブラウザ標準のクリップボード API
+- **HTTPS または localhost でのみ動作**(セキュリティ仕様)
+- async 関数
+
+### 「Copied!」を一時表示するパターン
+
+```tsx
+setCopied(true);
+setTimeout(() => setCopied(false), 2000);
+```
+
+- クリックで `true`、2秒後に元に戻す
+- よくある UX パターン(GitHub の Code コピーなど)
+
+### group + group-hover で「親ホバー時に子の表示」
+
+```tsx
+<div className="group">
+  <Button className="opacity-0 group-hover:opacity-100" />
+</div>
+```
+
+- 親に `group`、子に `group-hover:...` を付ける
+- Tailwind の重要パターン
+- 「コピーボタンは普段隠れていて、ホバー時に出現」のような UX
+
+### スクロール対応
+
+- 長い JSON でも画面を圧迫しない
+- `max-h-96` = 24rem (384px)
+
+### JSON 整形
+
+```ts
+JSON.stringify(data, null, 2);
+```
+
+- 第2引数 null = デフォルト
+- 第3引数 2 = インデント幅2スペース
+- 読みやすい整形 JSON になる
+
+---
+
+## EndpointCard の実装ポイント
+
+### Method バッジで HTTP メソッドを強調
+
+- 緑色のラベル
+- 将来 POST/DELETE を追加するときは色を変えると見やすい
+  - GET=緑、POST=青、PUT=黄、DELETE=赤 が定番
+
+### unknown 型でレスポンスを受ける
+
+```ts
+sampleResponse: unknown;
+```
+
+- `any` ではなく `unknown` を使うのが安全
+- `unknown` は操作する前に型ガードが必要 → うっかり処理を防ぐ
+- `JSON.stringify` に渡すだけなら `unknown` で問題なし
+
+### Loading / Error 状態を統一表示
+
+```tsx
+{isLoading && Loading...}
+{error && Error: {error}}
+{!isLoading && !error && }
+```
+
+- TanStack Query の `isLoading` / `error` をそのまま prop で受ける
+- 各 EndpointCard で同じ表示パターンを保証
+
+---
+
+## Path Parameter と Query Parameter を分ける
+
+REST API には2種類のパラメータがある:
+
+| 種類            | 例                                | URL 内の場所 |
+| --------------- | --------------------------------- | ------------ |
+| Path Parameter  | `/api/v1/choujin/:slug` の `slug` | パスの一部   |
+| Query Parameter | `?faction=seigi` の `faction`     | `?` 以降     |
+
+### EndpointCard で分離
+
+```tsx
+<EndpointCard
+  pathParams={[...]}    // セクション1
+  queryParams={[...]}   // セクション2
+/>
+```
+
+### 利点
+
+- ドキュメントとして正確
+- ユーザーが「URL のどこに入れるか」を一目で理解
+- ParamTable コンポーネントは共通化(DRY)
+
+### 内部実装の DRY
+
+```tsx
+function ParamTable({ title, params }) {
+  // ...
+}
+// EndpointCard 内で 2回使う
+```
+
+- 同じテーブルを Path/Query で繰り返さない
+- 同ファイル内の private 関数として置けばOK(複数ファイルで使うなら export)
+
+---
+
+## TanStack Query で複数クエリを並列実行
+
+```tsx
+const listQuery = useQuery({
+  queryKey: ['choujin', 'list'],
+  queryFn: () => fetchChoujinList()
+});
+
+const detailQuery = useQuery({
+  queryKey: ['choujin', 'detail', 'kinnikuman'],
+  queryFn: () => fetchChoujinDetail('kinnikuman')
+});
+```
+
+- 1コンポーネント内で複数 useQuery を呼べる
+- それぞれ独立してローディング/エラー状態を持つ
+- 並列で fetch が走る(順次ではない)
+- queryKey が違うので別キャッシュとして扱われる
+
+### Query Key の階層化が活きる場面
+
+- `['choujin', 'list']`
+- `['choujin', 'detail', 'kinnikuman']`
+
+Devtools で見ると、`choujin` 配下に階層的に表示される。将来:
+
+- `['choujin', 'list', { faction: 'seigi' }]` を増やしても整理されたまま
+
+---
+
+## オプショナルチェイニング `?.` と nullish 合体 `??`
+
+エラーメッセージを安全に取り出すパターン:
+
+```tsx
+error={listQuery.error?.message ?? null}
+```
+
+- `error?.message` — `error` が null/undefined ならスキップ(エラーにならない)
+- `?? null` — 左が null/undefined なら右(null)を返す
+
+普通の `||` との違い:
+
+```ts
+0 || 'fallback'; // → 'fallback'(0 が falsy なので)
+0 ?? 'fallback'; // → 0(null/undefined ではないので)
+```
+
+- `??` は **null と undefined だけ**を fallback の条件にする
+- 数値の 0 や空文字 '' を許容したいケースで `||` の代わりに使う
+
+## DRY と Single Responsibility のバランス
+
+### 過度な共通化は避ける
+
+- `EndpointCard` の中で `ParamTable` を分離 → ✅ 自然な分割
+- 1ヶ所でしか使わないものを切り出しても無意味
+- 「**2回以上同じパターンが出てきたら共通化を検討**」が経験則(Rule of Three)
+
+### 関数コンポーネントの境界
+
+- 同ファイル内の private 関数 → 共通化したいけど他ファイルでは使わない
+- 別ファイルに切り出し + export → 複数ファイルで使う、または十分な独立性がある
+
+今回の `ParamTable` は前者。複数の `EndpointCard` で使われるが、`EndpointCard` の外には出さない。
