@@ -1,4 +1,18 @@
+import { useQuery } from '@tanstack/react-query';
+import { fetchFactionList, fetchFactionDetail } from '@/api/client';
+import { EndpointCard } from '@/components/docs/EndpointCard';
+
 export function FactionDocs() {
+  const listQuery = useQuery({
+    queryKey: ['faction', 'list'],
+    queryFn: () => fetchFactionList()
+  });
+
+  const detailQuery = useQuery({
+    queryKey: ['faction', 'detail', 'seigi'],
+    queryFn: () => fetchFactionDetail('seigi')
+  });
+
   return (
     <div className="space-y-8">
       <header>
@@ -8,23 +22,45 @@ export function FactionDocs() {
         </p>
       </header>
 
-      <section>
-        <h2 className="text-xl font-semibold mb-2">エンドポイント一覧</h2>
-        <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
-          <li>
-            <code>GET /api/v1/faction</code> — 一覧
-          </li>
-          <li>
-            <code>GET /api/v1/faction/:slug</code> — 詳細
-          </li>
-        </ul>
-      </section>
+      <EndpointCard
+        method="GET"
+        path="/api/v1/faction"
+        description="軍団の一覧を取得します。ページネーションに対応。"
+        queryParams={[
+          {
+            name: 'limit',
+            type: 'number',
+            required: false,
+            description: '1ページの件数(デフォルト 20、最大 100)'
+          },
+          {
+            name: 'offset',
+            type: 'number',
+            required: false,
+            description: 'スキップ件数(デフォルト 0)'
+          }
+        ]}
+        sampleResponse={listQuery.data}
+        isLoading={listQuery.isLoading}
+        error={listQuery.error?.message ?? null}
+      />
 
-      <section>
-        <p className="text-sm text-muted-foreground">
-          ※ 詳細は Phase 6 で実装予定。
-        </p>
-      </section>
+      <EndpointCard
+        method="GET"
+        path="/api/v1/faction/:slug"
+        description="指定した slug の軍団の詳細情報を取得します。所属する超人リストも含みます。"
+        pathParams={[
+          {
+            name: 'slug',
+            type: 'string',
+            required: true,
+            description: '軍団の slug。例: seigi'
+          }
+        ]}
+        sampleResponse={detailQuery.data}
+        isLoading={detailQuery.isLoading}
+        error={detailQuery.error?.message ?? null}
+      />
     </div>
   );
 }
