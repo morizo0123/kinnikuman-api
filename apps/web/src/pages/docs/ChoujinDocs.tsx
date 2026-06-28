@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchChoujinList, fetchChoujinDetail } from '@/api/client';
 import { EndpointCard } from '@/components/docs/EndpointCard';
+import { PageHeader } from '@/components/docs/PageHeader';
 
 export function ChoujinDocs() {
   const listQuery = useQuery({
@@ -15,12 +16,10 @@ export function ChoujinDocs() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold mb-2">Choujin (超人)</h1>
-        <p className="text-muted-foreground">
-          キン肉マンに登場する超人の情報を取得する API。
-        </p>
-      </header>
+      <PageHeader
+        title="Choujin (超人)"
+        description="キン肉マンに登場する超人の情報を取得する API。"
+      />
 
       <EndpointCard
         method="GET"

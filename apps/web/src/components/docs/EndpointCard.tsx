@@ -52,7 +52,9 @@ export function EndpointCard({
 
       {/* サンプルレスポンス */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Sample Response</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Sample Response
+        </h3>
         {isLoading && (
           <div className="bg-muted rounded-md p-4 text-sm text-muted-foreground">
             Loading...
@@ -75,7 +77,10 @@ export function EndpointCard({
 function ParamTable({ title, params }: { title: string; params: Param[] }) {
   return (
     <div>
-      <h3 className="text-sm font-semibold mb-2">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+        {title}
+      </h3>
+
       <div className="border rounded-md overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted">

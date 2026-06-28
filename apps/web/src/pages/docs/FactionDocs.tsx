@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchFactionList, fetchFactionDetail } from '@/api/client';
 import { EndpointCard } from '@/components/docs/EndpointCard';
+import { PageHeader } from '@/components/docs/PageHeader';
 
 export function FactionDocs() {
   const listQuery = useQuery({
@@ -15,12 +16,10 @@ export function FactionDocs() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold mb-2">Faction (軍団)</h1>
-        <p className="text-muted-foreground">
-          超人が所属する軍団の情報を取得する API。
-        </p>
-      </header>
+      <PageHeader
+        title="Faction (軍団)"
+        description="超人が所属する軍団の情報を取得する API。"
+      />
 
       <EndpointCard
         method="GET"
