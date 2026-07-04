@@ -1,3 +1,4 @@
+import { Skeleton } from '@/components/ui/skeleton';
 import { CodeBlock } from './CodeBlock';
 
 type Param = {
@@ -32,7 +33,7 @@ export function EndpointCard({
     <section className="border rounded-lg p-6 space-y-6">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-700">
+          <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
             {method}
           </span>
           <code className="text-sm font-mono">{path}</code>
@@ -56,12 +57,15 @@ export function EndpointCard({
           Sample Response
         </h3>
         {isLoading && (
-          <div className="bg-muted rounded-md p-4 text-sm text-muted-foreground">
-            Loading...
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-2/3" />
           </div>
         )}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4 text-sm text-red-700">
+          <div className="bg-red-50 border border-red-200 rounded-md p-4 text-sm text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-300">
             Error: {error}
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { Button } from '../ui/button';
 
 type Props = {
@@ -26,7 +27,17 @@ export function CodeBlock({ code }: Props) {
         onClick={handleCopy}
         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? (
+          <>
+            <Check className="h-3.5 w-3.5" />
+            Copied!
+          </>
+        ) : (
+          <>
+            <Copy className="h-3.5 w-3.5" />
+            Copy
+          </>
+        )}
       </Button>
     </div>
   );

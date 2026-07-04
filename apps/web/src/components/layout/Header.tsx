@@ -1,4 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
+import { Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 export function Header() {
@@ -7,9 +8,10 @@ export function Header() {
       <nav className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-6">
         <Link
           to="/"
-          className="font-bold text-lg text-primary hover:opacity-80"
+          className="font-bold text-lg text-primary hover:opacity-80 flex items-center gap-2"
         >
-          🦸 KinnikumanAPI
+          <Zap className="h-5 w-5" fill="currentColor" />
+          KinnikumanAPI
         </Link>
 
         <div className="flex items-center gap-1 ml-auto">
