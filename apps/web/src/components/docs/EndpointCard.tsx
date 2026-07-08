@@ -1,5 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { CodeBlock } from './CodeBlock';
+import { TryItSection, type TryItParam } from './TryItSection';
 
 type Param = {
   name: string;
@@ -17,6 +18,13 @@ type Props = {
   sampleResponse: unknown;
   isLoading?: boolean;
   error?: string | null;
+  tryIt?: {
+    params: TryItParam[];
+    onExecute: (values: Record<string, string>) => void;
+    result?: unknown;
+    isLoading?: boolean;
+    error?: string | null;
+  };
 };
 
 export function EndpointCard({
@@ -27,7 +35,8 @@ export function EndpointCard({
   queryParams,
   sampleResponse,
   isLoading,
-  error
+  error,
+  tryIt
 }: Props) {
   return (
     <section className="border rounded-lg p-6 space-y-6">
@@ -73,6 +82,16 @@ export function EndpointCard({
           <CodeBlock code={JSON.stringify(sampleResponse, null, 2)} />
         )}
       </div>
+
+      {tryIt && (
+        <TryItSection
+          params={tryIt.params}
+          onExecute={tryIt.onExecute}
+          result={tryIt.result}
+          isLoading={tryIt.isLoading}
+          error={tryIt.error}
+        />
+      )}
     </section>
   );
 }

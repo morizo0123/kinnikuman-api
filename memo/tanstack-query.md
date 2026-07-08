@@ -230,3 +230,225 @@ useQuery({
 - React 19 の StrictMode は開発時に effect を2回実行する
 - TanStack Query は重複排除するので本番の動作には影響なし
 - 気になるなら Devtools で確認
+
+---
+
+## Try it 機能パターン(ボタン式実行)
+
+### やりたいこと
+
+- API ドキュメントで、ユーザーがパラメータを画面から変えて実行
+- Stripe、Twilio などの Docs で見る「Try it out」機能
+- **ボタン押下時だけ**API を叩く(初回自動実行しない)
+
+### enabled オプション
+
+```ts
+useQuery({
+  queryKey: [...],
+  queryFn: () => fetch(...),
+  enabled: false,  // ← 自動実行しない
+})
+```
+
+- デフォルトは `true`(マウント時自動実行)
+- `false` にすると条件を満たすまで待機
+- 値ベースで制御することが多い(`enabled: someParam !== null`)
+
+### 「Null Object Pattern」で実行状態を管理
+
+```ts
+const [committed, setCommitted] = useState<Params | null>(null);
+
+const query = useQuery({
+  queryKey: ['tryit', committed],
+  queryFn: () => fetch(committed!),
+  enabled: committed !== null // null なら発動しない
+});
+
+function handleExecute(values) {
+  setCommitted(convertToParams(values)); // ボタン押下でセット → useQuery 発動
+}
+```
+
+- **初期状態 `null`**: まだ実行してない意味
+- ボタン押下 → state を更新 → 依存配列(queryKey)が変わって useQuery 発動
+- 「実行済み or 未実行」を明示的に区別できる
+
+### queryKey にオブジェクトを含める
+
+```ts
+queryKey: ['choujin', 'tryit', 'list', params];
+```
+
+- オブジェクトそのものを queryKey に含めてOK
+- TanStack Query は**深い比較**でキーを判定
+- `{limit: 20}` と `{limit: 30}` は別キー扱い → 別キャッシュ
+
+### 同じ値で2回目実行 → キャッシュから返る
+
+- 同じ params でボタンを押しても、キャッシュがあれば再フェッチしない
+- Network タブに新規リクエストが出ない
+- Devtools で確認できる
+
+---
+
+## isLoading vs isFetching
+
+| プロパティ   | true になるタイミング                           |
+| ------------ | ----------------------------------------------- |
+| `isLoading`  | **初回**の取得中(まだキャッシュがない)          |
+| `isFetching` | 任意の取得中(キャッシュありでも再取得中は true) |
+
+### 使い分け
+
+- 「初回表示」用のスケルトン: `isLoading`
+- 「実行中」フィードバック(Try it の再クリックなど): `isFetching`
+
+Try it out ボタンは同じ値でも「実行してる感」を出したいので `isFetching` を使う。
+
+---
+
+## Sample と Try it で別クエリキャッシュ
+
+```ts
+// Sample Response 用
+useQuery({ queryKey: ['choujin', 'list'], ... })
+
+// Try it out 用
+useQuery({
+  queryKey: ['choujin', 'tryit', 'list', params],
+  enabled: params !== null,
+})
+```
+
+- **別キー = 別キャッシュ**
+- Try it で faction=seigi を叩いても、上の Sample Response には影響なし
+- 階層化した queryKey がここで活きる
+
+---
+
+## 動的フォーム状態管理
+
+### Record<string, string> で汎用フォーム
+
+```ts
+const [values, setValues] = useState<Record>(() => {
+  const initial: Record = {};
+  for (const p of params) {
+    initial[p.name] = p.defaultValue ?? '';
+  }
+  return initial;
+});
+
+function setValue(name: string, value: string) {
+  setValues((prev) => ({ ...prev, [name]: value }));
+}
+```
+
+- パラメータ定義(配列)から初期値を組み立て
+- `[name]: value` は**計算プロパティ名**(変数の値をキーに)
+- Immutable 更新: `{...prev, [name]: value}` で全コピー + 1つだけ上書き
+
+### `useState(() => ...)` の関数形式
+
+- 初期値の計算が重い場合、関数形式で「初回だけ実行」に
+- パフォーマンス最適化
+
+---
+
+## UI 値と API パラメータの変換
+
+境界層で変換するのが定石:
+
+```ts
+function handleExecute(values: Record) {
+  setCommitted({
+    limit: values.limit ? parseInt(values.limit, 10) : undefined,
+    offset: values.offset ? parseInt(values.offset, 10) : undefined,
+    faction: values.faction === 'all' ? undefined : values.faction
+  });
+}
+```
+
+### 変換パターン
+
+- 空文字 → `undefined`(API に送らない)
+- 文字列 → `parseInt(..., 10)` で数値化
+- 「全て」を意味する特別値(`'all'`)→ `undefined`
+
+「UI で扱う形」と「API で扱う形」を分けて考えるのがきれい。
+
+---
+
+## Radix UI Select の落とし穴
+
+### 空文字を SelectItem の value にできない
+
+```tsx
+{
+  /* ❌ エラー */
+}
+```
+
+**エラーメッセージ**:
+
+> A <Select.Item /> must have a value prop that is not an empty string.
+
+### 理由
+
+- Radix は「`value=""` = 未選択(placeholder 表示)」と定義
+- 空文字は**内部で予約済み**
+- SelectItem に `""` を渡すと未選択と区別できない
+
+### 対処
+
+- 「全て」を意味する値は `'all'` や `'__all__'` を使う
+- API に送るときは変換ロジックで `undefined` に落とす
+
+---
+
+## 汎用 TryItSection コンポーネント設計
+
+### パラメータ定義の型
+
+```ts
+export type TryItParam = {
+  name: string;
+  type: 'text' | 'number' | 'select';
+  label: string;
+  defaultValue?: string;
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+};
+```
+
+- 1つの型でテキスト、数値、ドロップダウンを表現
+- エンドポイントごとの違いを配列で表現
+
+### 関心の分離(Container / Presentation)
+
+TryItSection (UI 専任)
+├ フォーム状態
+├ 実行ボタン
+└ Response 表示
+↓ props で通知
+親コンポーネント (API 専任)
+├ useQuery
+└ onExecute で params を確定
+
+- TryItSection は UI のみ、API 呼び出しは親に任せる
+- 関心を分けると再利用性が上がる
+
+---
+
+## htmlFor と id でアクセシビリティ
+
+```tsx
+<Label htmlFor="limit">Limit</Label>
+<Input id="limit" ... />
+```
+
+- ラベルクリックで対応 Input にフォーカスが移る
+- スクリーンリーダーが「これが limit の入力欄」と読める
+- shadcn の Label + Input を使う時は忘れずに紐付け
