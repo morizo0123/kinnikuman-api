@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -9,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { Play } from 'lucide-react';
+import { Play, Loader2 } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 
 export type TryItParam = {
@@ -96,21 +97,33 @@ export function TryItSection({
         </div>
 
         <Button onClick={handleExecute} disabled={isLoading} className="gap-2">
-          <Play className="h-4 w-4" />
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
           {isLoading ? 'Executing...' : 'Try it out'}
         </Button>
 
-        {(result !== undefined || error) && (
+        {(isLoading || result !== undefined || error) && (
           <div className="pt-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               Response
             </h4>
-            {error && (
+            {isLoading && (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            )}
+            {!isLoading && error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-4 text-sm text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-300">
                 Error: {error}
               </div>
             )}
-            {result !== undefined && !error && (
+            {!isLoading && result !== undefined && !error && (
               <CodeBlock code={JSON.stringify(result, null, 2)} />
             )}
           </div>

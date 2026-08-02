@@ -11,6 +11,10 @@ type ListTryParams = {
   faction?: string;
 };
 
+type DetailTryParams = {
+  slug?: string;
+};
+
 export function ChoujinDocs() {
   // === Sample Response 用(既存) ===
   const listQuery = useQuery({
@@ -39,6 +43,23 @@ export function ChoujinDocs() {
       limit: values.limit ? parseInt(values.limit, 10) : undefined,
       offset: values.offset ? parseInt(values.offset, 10) : undefined,
       faction: values.faction === 'all' ? undefined : values.faction
+    });
+  }
+
+  // === Try it out 用 (Detail) ===
+  const [detailTryParams, setDetailTryParams] =
+    useState<DetailTryParams | null>(null);
+
+  const detailTryQuery = useQuery({
+    queryKey: ['choujin', 'tryit', 'detail', detailTryParams],
+    queryFn: () => fetchChoujinDetail(detailTryParams?.slug ?? ''),
+    enabled: detailTryParams !== null
+  });
+
+  function handleDetailExecute(values: Record<string, string>) {
+    if (!values.slug) return;
+    setDetailTryParams({
+      slug: values.slug
     });
   }
 
@@ -126,6 +147,20 @@ export function ChoujinDocs() {
         sampleResponse={detailQuery.data}
         isLoading={detailQuery.isLoading}
         error={detailQuery.error?.message ?? null}
+        tryIt={{
+          params: [
+            {
+              name: 'slug',
+              type: 'text',
+              label: 'Slug',
+              defaultValue: 'kinnikuman'
+            }
+          ],
+          onExecute: handleDetailExecute,
+          result: detailTryQuery.data,
+          isLoading: detailTryQuery.isFetching,
+          error: detailTryQuery.error?.message ?? null
+        }}
       />
     </div>
   );

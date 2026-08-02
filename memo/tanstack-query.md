@@ -452,3 +452,140 @@ TryItSection (UI 専任)
 - ラベルクリックで対応 Input にフォーカスが移る
 - スクリーンリーダーが「これが limit の入力欄」と読める
 - shadcn の Label + Input を使う時は忘れずに紐付け
+
+---
+
+## Path Parameter の Try it
+
+Query Parameter(limit, offset)と違い、Path Parameter は URL の一部として埋め込まれる:
+
+- List: `/api/v1/choujin?limit=20&faction=seigi`
+- Detail: `/api/v1/choujin/kinnikuman`
+
+Try it の実装パターンは Query とほぼ同じ、変換ロジックが違うだけ。
+
+### 例: slug の受け渡し
+
+```ts
+type DetailTryParams = {
+  slug: string;
+};
+
+const [detailTryParams, setDetailTryParams] = useState<DetailTryParams | null>(
+  null
+);
+
+const detailTryQuery = useQuery({
+  queryKey: ['choujin', 'tryit', 'detail', detailTryParams],
+  queryFn: () => fetchChoujinDetail(detailTryParams!.slug),
+  enabled: detailTryParams !== null
+});
+```
+
+### queryFn での nullable 対応
+
+```ts
+queryFn: () => fetchChoujinDetail(detailTryParams?.slug ?? '');
+// または
+queryFn: () => fetchChoujinDetail(detailTryParams!.slug);
+```
+
+- `!`(non-null assertion): TS に「これは null じゃない」と伝える
+- 実行時は `enabled: ... !== null` で保護されているので安全
+- 型を最初から nullable なしにすると `!` が1つで済む
+
+### defaultValue に例を入れると親切
+
+```ts
+{ name: 'slug', type: 'text', label: 'Slug', defaultValue: 'kinnikuman' }
+```
+
+- 初期状態でボタンを押すだけで結果が出る
+- ユーザーが「何を入れればいいか」を理解しやすい
+
+---
+
+## サーバー待ちの UX 改善
+
+存在しない ID などで API を叩くと、404 が返るまで数百msかかる。
+この間の見せ方で体感時間が変わる。
+
+### 対処: スケルトン UI + スピナー
+
+Response エリアにスケルトンを表示すると「動いてる感」が出る:
+
+```tsx
+{
+  isLoading && (
+    <div className="space-y-2">
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-5/6" />
+    </div>
+  );
+}
+```
+
+ボタン内にスピナーを回す:
+
+```tsx
+{
+  isLoading ? (
+    <Loader2 className="h-4 w-4 animate-spin" />
+  ) : (
+    <Play className="h-4 w-4" />
+  );
+}
+```
+
+### animate-spin
+
+Tailwind の組み込みアニメーション、360度回転を無限ループ:
+
+```css
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+```
+
+### 表示ロジックの整理
+
+```tsx
+{
+  (isLoading || result !== undefined || error) && (
+    <div>
+      <h4>Response</h4>
+      {isLoading && <Skeleton />} {/* 実行中 */}
+      {!isLoading && error && <ErrorBox />} {/* エラー */}
+      {!isLoading && result !== undefined && !error && <Result />} {/* 成功 */}
+    </div>
+  );
+}
+```
+
+- ローディング中は「スケルトンだけ」
+- 完了後は「エラー or 結果」に切り替え
+- 条件を `!isLoading &&` で守るのが定石
+
+---
+
+## 「体感時間」という概念
+
+Web アプリの UX で覚えておくべき原則:
+
+> 実際の時間は同じでも、見せ方で「体感時間」は変えられる
+
+代表的なパターン:
+
+1. **スケルトン UI** — データの形を予告
+2. **Progressive Rendering** — 部分的にすぐ表示
+3. **Optimistic Update** — 即座に成功したフリ
+4. **Prefetching** — 先読みで待ちを消す
+5. **スピナー・プログレス** — 進行中を明示
+
+TanStack Query は全部サポートしてる。「実装は同じ、見せ方だけ変える」で UX が大きく向上する場面が多い。
