@@ -589,3 +589,161 @@ Web アプリの UX で覚えておくべき原則:
 5. **スピナー・プログレス** — 進行中を明示
 
 TanStack Query は全部サポートしてる。「実装は同じ、見せ方だけ変える」で UX が大きく向上する場面が多い。
+
+---
+
+## curl コマンドの動的表示
+
+### なぜ表示するか
+
+- 「実際に curl でどう叩くか」をドキュメント上で示せる
+- ユーザーがコピペしてターミナルで実行できる
+- Stripe / Twilio / Postman が標準でやっている機能
+
+### 実装方針: 関数を props で渡す
+
+TryItSection の中で「curl 文字列を組み立てる関数」を受け取る:
+
+```tsx
+type Props = {
+  // ...
+  buildCurl?: (values: Record<string, string>) => string;
+};
+```
+
+親コンポーネントから、そのエンドポイント固有の組み立てロジックを渡す:
+
+```tsx
+buildCurl: (values) => {
+  const query = new URLSearchParams();
+  if (values.limit) query.set('limit', values.limit);
+  if (values.faction && values.faction !== 'all') {
+    query.set('faction', values.faction);
+  }
+  const q = query.toString();
+  const path = `/api/v1/choujin${q ? `?${q}` : ''}`;
+  return `curl http://localhost:3000${path}`;
+};
+```
+
+### なぜ関数を渡す?
+
+- エンドポイントごとに URL の組み立て方が違う
+- 「Path Parameter を埋め込む」「Query String を組み立てる」「特別値の除外」がバラバラ
+- 関数として渡せば、汎用コンポーネントを保ちつつ柔軟に対応
+
+### 値変更で自動更新される仕組み
+
+```tsx
+<CodeBlock code={buildCurl(values)} />
+```
+
+- `values` は state → 変更されれば再レンダリング
+- 再レンダリング時に `buildCurl(values)` が再実行 → 新しい文字列
+- **React のリアクティブ機能だけで実現、useEffect 不要**
+
+---
+
+## 中継コンポーネントの型定義パターン
+
+### 問題
+
+`TryItSection` → `EndpointCard` → `ChoujinDocs` と props を中継する構造だと:
+
+- TryItSection の Props に prop を追加
+- **EndpointCard も型を追加しないとエラー**
+- 手動での二重管理が必要
+
+### 解決策1: 型を export して共有
+
+```tsx
+// TryItSection.tsx
+export type TryItProps = {
+  params: TryItParam[];
+  onExecute: (values: Record<string, string>) => void;
+  // ...
+};
+
+// EndpointCard.tsx
+import type { TryItProps } from './TryItSection';
+type Props = {
+  tryIt?: TryItProps;
+};
+```
+
+### 解決策2: ComponentProps ヘルパー(定石)
+
+```tsx
+import type { ComponentProps } from 'react';
+import { TryItSection } from './TryItSection';
+
+type Props = {
+  tryIt?: ComponentProps<typeof TryItSection>;
+};
+```
+
+- コンポーネントの Props 型を**直接**参照
+- 追加・削除しても自動で追従、ズレることがない
+- 中継コンポーネントの定石テクニック
+
+### 解決策3: prop の平坦化
+
+```tsx
+// ネスト
+tryIt={{ params, onExecute, ... }}
+
+// 平坦化
+tryItParams={params}
+onTryItExecute={onExecute}
+```
+
+- 中継が楽
+- ただし親コンポーネントの Props が肥大化
+
+### 選び方
+
+- 頻繁に変わるなら **解決策2**
+- そもそも props が少ないなら **今の手動追加**でも OK
+- チーム開発で厳密性が欲しければ **解決策2**
+
+---
+
+## URLSearchParams の使い方(再掲)
+
+```typescript
+const query = new URLSearchParams();
+if (values.limit) query.set('limit', values.limit);
+query.toString(); // → "limit=20&offset=0"
+
+const path = `/api/v1/choujin${query.toString() ? `?${query}` : ''}`;
+```
+
+### ポイント
+
+- **空値・undefined は set しない** → 綺麗な URL に
+- クエリ文字列がなければ `?` 自体を付けない
+- エスケープが自動なので安全
+
+### 手書き文字列との比較
+
+```typescript
+// NG: エスケープが必要、条件分岐が煩雑
+const path = `/api/v1/choujin?limit=${limit}&offset=${offset}`;
+
+// OK: URLSearchParams
+const query = new URLSearchParams({ limit, offset });
+```
+
+---
+
+## 環境変数で URL を切り替える
+
+開発中はローカル、本番は本番 URL に切り替えたい:
+
+```typescript
+`curl ${import.meta.env.VITE_API_URL}${path}`;
+```
+
+- Vite の `VITE_` プレフィックス環境変数
+- `.env.development` / `.env.production` で切り替え可能
+- 学習中は `localhost:3000` ハードコードで OK

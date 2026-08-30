@@ -128,7 +128,18 @@ export function ChoujinDocs() {
           onExecute: handleListExecute,
           result: listTryQuery.data,
           isLoading: listTryQuery.isFetching,
-          error: listTryQuery.error?.message ?? null
+          error: listTryQuery.error?.message ?? null,
+          buildCurl: (values) => {
+            const query = new URLSearchParams();
+            if (values.limit) query.set('limit', values.limit);
+            if (values.offset) query.set('offset', values.offset);
+            if (values.faction && values.faction !== 'all') {
+              query.set('faction', values.faction);
+            }
+            const queryString = query.toString();
+            const path = `/api/v1/choujin${queryString ? `?${queryString}` : ''}`;
+            return `curl http://localhost:3000${path}`;
+          }
         }}
       />
 
@@ -159,7 +170,10 @@ export function ChoujinDocs() {
           onExecute: handleDetailExecute,
           result: detailTryQuery.data,
           isLoading: detailTryQuery.isFetching,
-          error: detailTryQuery.error?.message ?? null
+          error: detailTryQuery.error?.message ?? null,
+          buildCurl: (values) => {
+            return `curl http://localhost:3000/api/v1/choujin/${values.slug || ''}`;
+          }
         }}
       />
     </div>

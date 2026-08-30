@@ -1,6 +1,7 @@
+import type { ComponentProps } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CodeBlock } from './CodeBlock';
-import { TryItSection, type TryItParam } from './TryItSection';
+import { TryItSection } from './TryItSection';
 
 type Param = {
   name: string;
@@ -18,13 +19,7 @@ type Props = {
   sampleResponse: unknown;
   isLoading?: boolean;
   error?: string | null;
-  tryIt?: {
-    params: TryItParam[];
-    onExecute: (values: Record<string, string>) => void;
-    result?: unknown;
-    isLoading?: boolean;
-    error?: string | null;
-  };
+  tryIt?: ComponentProps<typeof TryItSection>;
 };
 
 export function EndpointCard({
@@ -90,6 +85,7 @@ export function EndpointCard({
           result={tryIt.result}
           isLoading={tryIt.isLoading}
           error={tryIt.error}
+          buildCurl={tryIt.buildCurl}
         />
       )}
     </section>

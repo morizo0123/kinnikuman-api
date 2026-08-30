@@ -28,6 +28,7 @@ type Props = {
   result?: unknown;
   isLoading?: boolean;
   error?: string | null;
+  buildCurl?: (values: Record<string, string>) => string;
 };
 
 export function TryItSection({
@@ -35,7 +36,8 @@ export function TryItSection({
   onExecute,
   result,
   isLoading,
-  error
+  error,
+  buildCurl
 }: Props) {
   // 各パラメータの値を state で管理
   const [values, setValues] = useState<Record<string, string>>(() => {
@@ -95,6 +97,15 @@ export function TryItSection({
             </div>
           ))}
         </div>
+
+        {buildCurl && (
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Request
+            </h4>
+            <CodeBlock code={buildCurl(values)} />
+          </div>
+        )}
 
         <Button onClick={handleExecute} disabled={isLoading} className="gap-2">
           {isLoading ? (
