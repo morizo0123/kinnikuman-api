@@ -86,6 +86,9 @@ export function EndpointCard({
           isLoading={tryIt.isLoading}
           error={tryIt.error}
           buildCurl={tryIt.buildCurl}
+          status={tryIt.status}
+          statusText={tryIt.statusText}
+          durationMs={tryIt.durationMs}
         />
       )}
     </section>

@@ -747,3 +747,230 @@ const query = new URLSearchParams({ limit, offset });
 - Vite の `VITE_` プレフィックス環境変数
 - `.env.development` / `.env.production` で切り替え可能
 - 学習中は `localhost:3000` ハードコードで OK
+
+---
+
+## API クライアントを ApiResponse<T> でラップする
+
+### 動機
+
+- Try it 機能で HTTP ステータス、レスポンスタイムなど**メタ情報**を表示したい
+- 従来の `fetch → JSON` だと status やタイムがどこにも残らない
+- API クライアントを「JSON + メタ情報」を返す形にラップする
+
+### 型設計
+
+```ts
+export type ApiResponse<T> = {
+  data: T;
+  status: number;
+  statusText: string;
+  durationMs: number;
+};
+```
+
+### apiFetch の実装
+
+```ts
+async function apiFetch<T>(path: string): Promise<ApiResponse<T>> {
+  const start = performance.now();
+  const res = await fetch(`${BASE_URL}${path}`);
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = (await res.json()) as T;
+  return { data, status: res.status, statusText: res.statusText, durationMs };
+}
+```
+
+### エラー時のメタ情報
+
+- `throw new Error(...)` した Error オブジェクトに status を仕込む
+- `;(error as any).status = ...` は「型を無視して代入」
+- TanStack Query の `error` を経由して呼び出し側で取り出せる
+- 厳密にやるなら「ApiError クラス」を定義するが、シンプルさ優先で any
+
+---
+
+## performance.now() vs Date.now()
+
+| API                 | 精度                     | 用途                                   |
+| ------------------- | ------------------------ | -------------------------------------- |
+| `Date.now()`        | ミリ秒(整数)             | 通常のタイムスタンプ                   |
+| `performance.now()` | マイクロ秒(小数点以下も) | **短い時間差の計測**(API 応答時間など) |
+
+### 使い方
+
+```ts
+const start = performance.now();
+// ... 処理 ...
+const durationMs = Math.round(performance.now() - start);
+```
+
+- `performance.now()` は「ページ読み込み時からの経過時間」を返す
+- 差分を取ればその処理の実行時間
+- 表示用に `Math.round()` で整数化することが多い
+
+---
+
+## TanStack Query の select オプション
+
+### 用途
+
+「queryFn の結果を**変換してから**呼び出し側に渡す」
+
+### 使い方
+
+```ts
+useQuery({
+  queryKey: [...],
+  queryFn: () => fetchChoujinList(),        // ApiResponse<T> を返す
+  select: (res) => res.data,                 // 呼び出し側にはこれだけ渡す
+})
+// listQuery.data は res.data 相当
+```
+
+### メリット
+
+- 呼び出し側のコード変更なし(内部の型変更に強い)
+- キャッシュ自体は生データを保持、変換は表示時に実行
+- 他の useQuery で同じキャッシュを別の形で使うこともできる
+
+### いつ select を使わない?
+
+- Try it のように**生のメタ情報**(status, durationMs)が欲しい場合
+- そのときは select を付けず、`.data.data` でアクセス
+
+---
+
+## 段階的リファクタリングの手順
+
+内部設計を変えるとき、**動作を壊さず**進めるための定石:
+
+Step 1: 基盤を変える(apiFetch を ApiResponse<T> に)
+↓
+Step 2: 呼び出し側で select を付ける(既存動作を維持)
+↓
+Step 3: 動作確認(何も変わらないことを確認)
+↓
+Step 4: 新機能を追加(バッジ、タイム表示)
+↓
+Step 5: 動作確認(新機能が動くことを確認)
+
+### なぜこの順序か
+
+- **「動くもの」を常にキープ**しながら進む
+- 何か壊れたらどのステップで壊れたか特定しやすい
+- ぶっつけ本番で全部書き換えると原因追跡が地獄
+
+これは実務でも頻繁に使うテクニック。「Refactor first, then add feature」。
+
+---
+
+## HTTP ステータスの色分け慣習
+
+Web の世界で広く使われる色分け:
+
+| ステータス | 意味               | 色               |
+| ---------- | ------------------ | ---------------- |
+| 2xx        | 成功               | 緑(emerald)      |
+| 3xx        | リダイレクト       | 青(あまり見ない) |
+| 4xx        | クライアントエラー | 黄(amber)        |
+| 5xx        | サーバーエラー     | 赤(red)          |
+
+### Tailwind での実装
+
+```tsx
+const color =
+  status >= 200 && status < 300
+    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+    : status >= 400 && status < 500
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+      : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+```
+
+- ライト / ダーク両対応
+- 標準の色分けに従うと、ユーザーが直感的に理解できる
+- Postman、Swagger UI、ブラウザ Dev Tools など、みんなこの色分け
+
+---
+
+## Error オブジェクトに情報を付与するパターン
+
+### 問題
+
+`throw new Error('...')` だと、エラー時にメッセージしか渡らない。
+status やタイムなど**追加情報**を残したい。
+
+### 解決
+
+```ts
+const error = new Error(`API error: ${res.status}`);
+(error as any).status = res.status;
+(error as any).durationMs = durationMs;
+throw error;
+```
+
+### 呼び出し側
+
+```ts
+tryIt={{
+  status:
+    listTryQuery.data?.status ??                    // 成功時
+    (listTryQuery.error as any)?.status,            // エラー時
+}}
+```
+
+- `??`(nullish 合体演算子)で「成功時 or エラー時」を1行で表現
+- `(x as any)` はキャストが必要(Error 型に status プロパティがないため)
+
+### より厳密にやるなら
+
+```ts
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public durationMs: number
+  ) {
+    super(message);
+  }
+}
+```
+
+カスタムエラークラスを定義すると型安全。実務ではこっちがおすすめ。
+
+--
+
+## 中継コンポーネントの Props 拡張
+
+### 3層構造の課題
+
+TryItSection → EndpointCard → ChoujinDocs
+TryItSection の Props に追加したら、EndpointCard の型も追従が必要。
+
+### 今回のアプローチ
+
+手動で3箇所を更新:
+
+1. TryItSection の Props 型に追加
+2. EndpointCard の tryIt 型にも追加
+3. TryItSection への受け渡しに追加
+
+### 面倒に感じたら
+
+`ComponentProps<typeof TryItSection>` で自動追従できる:
+
+```tsx
+type Props = {
+  tryIt?: ComponentProps<typeof TryItSection>;
+};
+```
+
+中継が多くなってきたら移行する候補。

@@ -6,18 +6,37 @@ import type {
   PaginatedResponse
 } from './types';
 
+// メタ情報付きレスポンスの型
+export type ApiResponse<T> = {
+  data: T;
+  status: number;
+  statusText: string;
+  durationMs: number;
+};
+
 const BASE_URL = import.meta.env.VITE_API_URL;
 
 // === fetch のラッパー ===
-async function apiFetch<T>(path: string): Promise<T> {
+async function apiFetch<T>(path: string): Promise<ApiResponse<T>> {
   const url = `${BASE_URL}${path}`;
+  const start = performance.now();
   const res = await fetch(url);
+  const durationMs = Math.round(performance.now() - start);
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
   }
 
-  return res.json() as Promise<T>;
+  const data = (await res.json()) as T;
+  return {
+    data,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
 }
 
 // === Choujin ===

@@ -29,6 +29,9 @@ type Props = {
   isLoading?: boolean;
   error?: string | null;
   buildCurl?: (values: Record<string, string>) => string;
+  status?: number;
+  statusText?: string;
+  durationMs?: number;
 };
 
 export function TryItSection({
@@ -37,7 +40,10 @@ export function TryItSection({
   result,
   isLoading,
   error,
-  buildCurl
+  buildCurl,
+  status,
+  statusText,
+  durationMs
 }: Props) {
   // 各パラメータの値を state で管理
   const [values, setValues] = useState<Record<string, string>>(() => {
@@ -121,6 +127,19 @@ export function TryItSection({
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               Response
             </h4>
+
+            <div className="mb-1">
+              {status !== undefined && (
+                <StatusBadge status={status} statusText={statusText} />
+              )}
+
+              {durationMs !== undefined && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  {durationMs}ms
+                </span>
+              )}
+            </div>
+
             {isLoading && (
               <div className="space-y-2">
                 <Skeleton className="h-4 w-3/4" />
@@ -129,11 +148,13 @@ export function TryItSection({
                 <Skeleton className="h-4 w-2/3" />
               </div>
             )}
+
             {!isLoading && error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-4 text-sm text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-300">
                 Error: {error}
               </div>
             )}
+
             {!isLoading && result !== undefined && !error && (
               <CodeBlock code={JSON.stringify(result, null, 2)} />
             )}
@@ -141,5 +162,26 @@ export function TryItSection({
         )}
       </div>
     </div>
+  );
+}
+
+function StatusBadge({
+  status,
+  statusText
+}: {
+  status: number;
+  statusText?: string;
+}) {
+  const color =
+    status >= 200 && status < 300
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+      : status >= 400 && status < 500
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+        : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300';
+
+  return (
+    <span className={`text-xs font-bold px-2 py-0.5 rounded ${color}`}>
+      {status} {statusText}
+    </span>
   );
 }

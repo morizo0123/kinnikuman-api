@@ -19,12 +19,14 @@ export function ChoujinDocs() {
   // === Sample Response 用(既存) ===
   const listQuery = useQuery({
     queryKey: ['choujin', 'list'],
-    queryFn: () => fetchChoujinList()
+    queryFn: () => fetchChoujinList(),
+    select: (res) => res.data
   });
 
   const detailQuery = useQuery({
     queryKey: ['choujin', 'detail', 'kinnikuman'],
-    queryFn: () => fetchChoujinDetail('kinnikuman')
+    queryFn: () => fetchChoujinDetail('kinnikuman'),
+    select: (res) => res.data
   });
 
   // === Try it out 用 (List) ===
@@ -126,7 +128,7 @@ export function ChoujinDocs() {
             }
           ],
           onExecute: handleListExecute,
-          result: listTryQuery.data,
+          result: listTryQuery.data?.data,
           isLoading: listTryQuery.isFetching,
           error: listTryQuery.error?.message ?? null,
           buildCurl: (values) => {
@@ -139,7 +141,13 @@ export function ChoujinDocs() {
             const queryString = query.toString();
             const path = `/api/v1/choujin${queryString ? `?${queryString}` : ''}`;
             return `curl http://localhost:3000${path}`;
-          }
+          },
+          status:
+            listTryQuery.data?.status ?? (listTryQuery.error as any)?.status,
+          statusText: listTryQuery.data?.statusText,
+          durationMs:
+            listTryQuery.data?.durationMs ??
+            (listTryQuery.error as any)?.durationMs
         }}
       />
 
@@ -168,12 +176,19 @@ export function ChoujinDocs() {
             }
           ],
           onExecute: handleDetailExecute,
-          result: detailTryQuery.data,
+          result: detailTryQuery.data?.data,
           isLoading: detailTryQuery.isFetching,
           error: detailTryQuery.error?.message ?? null,
           buildCurl: (values) => {
             return `curl http://localhost:3000/api/v1/choujin/${values.slug || ''}`;
-          }
+          },
+          status:
+            detailTryQuery.data?.status ??
+            (detailTryQuery.error as any)?.status,
+          statusText: detailTryQuery.data?.statusText,
+          durationMs:
+            detailTryQuery.data?.durationMs ??
+            (detailTryQuery.error as any)?.durationMs
         }}
       />
     </div>
