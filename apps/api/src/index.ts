@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import choujinRoute from './routes/choujin.js';
 import factionRoute from './routes/faction.js';
 import choujinV2Route from './routes/choujin-v2.js';
+import factionV2Route from './routes/faction-v2.js';
 
 const app = new Hono();
 
@@ -27,6 +28,7 @@ app.get('/health', (c) => {
 app.route('/api/v1/choujin', choujinRoute);
 app.route('/api/v1/faction', factionRoute);
 app.route('/api/v2/choujin', choujinV2Route);
+app.route('/api/v2/faction', factionV2Route);
 
 const port = 3000;
 console.log(`🦸 API server running on http://localhost:${port}`);

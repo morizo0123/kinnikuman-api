@@ -26,6 +26,34 @@ const ListResponseSchema = z.object({
   results: z.array(ChoujinItemSchema)
 });
 
+const ChoujinDetailSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  real_name: z.string().nullable(),
+  power: z.string().nullable(),
+  origin: z.string().nullable(),
+  height_cm: z.number().nullable(),
+  weight_kg: z.number().nullable(),
+  description: z.string().nullable(),
+  factions: z.array(
+    z.object({
+      slug: z.string(),
+      name: z.string(),
+      url: z.string()
+    })
+  )
+});
+
+// エラーレスポンス用(404 とか)
+const ErrorSchema = z.object({
+  error: z.string()
+});
+
+// Path パラメータ用
+const SlugParamSchema = z.object({
+  slug: z.string()
+});
+
 // 3. ルート定義(スキーマとハンドラを分離)
 const route = createRoute({
   method: 'get',
@@ -43,6 +71,30 @@ const route = createRoute({
         }
       },
       description: '超人一覧'
+    }
+  }
+});
+
+const detailRoute = createRoute({
+  method: 'get',
+  path: '/{slug}',
+  tags: ['Choujin'],
+  summary: '超人詳細を取得',
+  request: {
+    params: SlugParamSchema
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': { schema: ChoujinDetailSchema }
+      },
+      description: '超人詳細'
+    },
+    404: {
+      content: {
+        'application/json': { schema: ErrorSchema }
+      },
+      description: '見つからない'
     }
   }
 });
@@ -108,6 +160,42 @@ app.openapi(route, async (c) => {
       url: `/api/v2/choujin/${row.slug}`
     }))
   });
+});
+
+app.openapi(detailRoute, async (c) => {
+  const { slug } = c.req.valid('param');
+
+  const row = await db.query.choujin.findFirst({
+    where: eq(choujin.slug, slug),
+    with: {
+      factions: {
+        with: { faction: true }
+      }
+    }
+  });
+
+  if (!row) {
+    return c.json({ error: 'Choujin not found' }, 404);
+  }
+
+  return c.json(
+    {
+      slug: row.slug,
+      name: row.name,
+      real_name: row.realName,
+      power: row.power,
+      origin: row.origin,
+      height_cm: row.heightCm,
+      weight_kg: row.weightKg,
+      description: row.description,
+      factions: row.factions.map((cf) => ({
+        slug: cf.faction.slug,
+        name: cf.faction.name,
+        url: `/api/v2/faction/${cf.faction.slug}`
+      }))
+    },
+    200
+  );
 });
 
 export default app;
