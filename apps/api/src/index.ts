@@ -51,3 +51,5 @@ serve({
   fetch: app.fetch,
   port
 });
+
+export type AppType = typeof app;

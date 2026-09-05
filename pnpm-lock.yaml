@@ -53,12 +53,18 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.101.0
         version: 5.101.0(react@19.2.7)
+      api:
+        specifier: workspace:*
+        version: link:../api
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      hono:
+        specifier: ^4.12.15
+        version: 4.12.15
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)

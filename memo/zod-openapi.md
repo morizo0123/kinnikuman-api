@@ -720,3 +720,237 @@ Zod スキーマを1回書く
 - 手書きだと3箇所(型・バリデーション・ドキュメント)を維持
 - スキーマ駆動だと1箇所を維持
 - **DRY 原則の実践例**として、Zod スキーマ駆動開発は理想的
+
+---
+
+## Hono RPC (hc) で BE の型を FE に共有
+
+### そもそもの発想
+
+- Zod OpenAPI で作ったルート型を、FE から直接使えたら理想
+- 手書きの API クライアント(fetchChoujinList など)を書かなくて済む
+- BE の変更が FE のコンパイル時に検知される
+
+### hc の仕組み(概念)
+
+```ts
+// BE 側
+const app = new OpenAPIHono();
+app.openapi(route, handler);
+export type AppType = typeof app; // ← 型として export
+
+// FE 側
+import { hc } from 'hono/client';
+import type { AppType } from 'api';
+const client = hc<AppType>('http://localhost:3000');
+
+// 使う側
+const res = await client.api.v2.choujin.$get({
+  query: { limit: '20', faction: 'seigi' }
+});
+```
+
+### 何が起きているか
+
+- `typeof app` で app に蓄積された全ルート情報を型化
+- FE 側は `hc<AppType>(...)` でその型を丸ごと受け取る
+- 実行時のコードは配信しない、**型情報だけを共有**
+- BE の Zod スキーマを変えると FE の補完が自動追従
+
+---
+
+## モノレポ内での型共有セットアップ
+
+### 前提: pnpm workspace
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'apps/*'
+  - 'packages/*'
+```
+
+### 依存関係の追加
+
+FE の package.json に BE を workspace dependency として追加:
+
+```bash
+cd apps/web
+pnpm add hono
+pnpm add 'api@workspace:*'   # zsh はクォート必須(*が展開される)
+```
+
+package.json に反映される:
+
+```json
+{
+  "dependencies": {
+    "api": "workspace:*",
+    "hono": "..."
+  }
+}
+```
+
+### zsh の特殊文字問題
+
+```bash
+# NG: zsh の * がグロブ展開されて "no matches found"
+pnpm add api@workspace:*
+
+# OK: クォートで囲む
+pnpm add 'api@workspace:*'
+
+# OK: ^ でも同じ意味
+pnpm add api@workspace:^
+
+# OK: package.json を直接編集 → pnpm install
+```
+
+- bash は未マッチのグロブをそのまま渡す
+- zsh は未マッチをエラーにする(デフォルト設定)
+- 覚えておくと救われる
+
+---
+
+## exports フィールドで TS ソースを直接共有
+
+### 問題
+
+`import type { AppType } from 'api'` すると **"モジュールが見つからない"** エラー。
+
+### 原因
+
+`apps/api/package.json` に「エントリーポイントはどこ?」が書かれていない。
+Node.js / TypeScript は `exports` フィールドを見て解決する。
+
+### 修正
+
+apps/api/package.json に追加:
+
+```json
+{
+  "name": "api",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+  // ...
+}
+```
+
+### exports の記法
+
+- `"."` はパッケージ本体(`import from 'api'`)
+- `"./sub"` みたいにサブパスも定義可能
+- 解決先を条件分岐(`import` / `require` / `types` など)することも可能
+
+### 通常は .js を指定するが、モノレポでは .ts でも OK
+
+- 一般的な npm パッケージ配布 → ビルド済み `.js` を指定
+- **モノレポ内で TS ソースを直接共有** → `.ts` を指定できる
+- FE 側の Vite / TS Server が TS をそのまま扱えるので問題なし
+- 事前ビルドが不要になる利点
+
+### TypeScript の型解決
+
+- exports に `.ts` を指定 → 型もソースファイルから直接読める
+- 別途 `types` フィールドも不要
+- モノレポの型共有では鉄板パターン
+
+---
+
+## Hono RPC の型補完
+
+### 補完が効くパスの例
+
+```ts
+client.api.v2.choujin.$get({
+  query: { limit: '20' }
+});
+
+client.api.v2.choujin[':slug'].$get({
+  param: { slug: 'kinnikuman' }
+});
+
+client.api.v2.faction.$get({
+  query: { limit: '10' }
+});
+```
+
+### 記法のポイント
+
+- **パス**はドット記法(オブジェクトのプロパティのように)
+- **パスパラメータ**は `[':slug']` のようにブラケット記法
+- **HTTP メソッド**は `$get`, `$post` など `$` プレフィックス
+- **クエリ/パス/ボディ**はオブジェクトで渡す
+
+### 型がミスを検知
+
+```ts
+// OK
+client.api.v2.choujin.$get({ query: { faction: 'seigi' } })
+
+// TS エラー(faction_slug なんてキーは無い)
+client.api.v2.choujin.$get({ query: { faction_slug: 'seigi' } })
+
+// TS エラー(パスが違う)
+client.api.v2.choujin.detail.$get(...)
+```
+
+### 実行時ではなくコンパイル時に検知
+
+- ランタイムに到達する前に IDE で赤線
+- BE を変更したら FE がすぐビルドエラーを出す
+- **「BE と FE の同期が絶対にズレない」** 状態
+
+---
+
+## 手書き API クライアント vs hc の比較
+
+|                 | 手書き       | Hono RPC (hc)      |
+| --------------- | ------------ | ------------------ |
+| fetch 関数      | 自分で書く   | 不要               |
+| 型定義          | 手書き       | 自動               |
+| URL 組み立て    | 文字列で書く | プロパティアクセス |
+| BE 変更への追従 | 手で修正     | **自動**           |
+| リクエスト型    | 手書き       | 自動               |
+| レスポンス型    | 手書き       | 自動               |
+
+### hc のトレードオフ
+
+- **利点**: 型安全性、DRY、保守が楽
+- **欠点**:
+  - Hono 依存(他のフレームワークで再利用しにくい)
+  - モノレポ前提(別リポの BE では openapi-typescript のほうが良い)
+  - FE のバンドルに Hono が入る(小さいけどゼロではない)
+
+### 併存戦略
+
+- BE と FE が同じリポなら → hc
+- BE と FE が別リポなら → openapi-typescript
+- ドキュメント公開が主なら → Swagger UI
+
+---
+
+## 型共有の選択肢まとめ
+
+Zod OpenAPI を導入した後、FE との型共有には 3 つの選択肢:
+
+| 方法                   | 説明                          | 向いてる場面                    |
+| ---------------------- | ----------------------------- | ------------------------------- |
+| **Hono RPC (hc)**      | typeof app を FE から使う     | モノレポ、Hono を BE に採用     |
+| **packages/shared**    | Zod スキーマを両方から import | 型/バリデーション両方共有したい |
+| **openapi-typescript** | OpenAPI JSON から型生成       | 別リポ、公開 API のクライアント |
+
+今回は**モノレポ + Hono** なので Hono RPC が最適。
+
+---
+
+## Step 9-6 の進捗記録
+
+- [x] BE で `export type AppType = typeof app`
+- [x] FE で `pnpm add hono` と `pnpm add 'api@workspace:*'`
+- [x] apps/api/package.json に exports 追加
+- [x] FE で `const client = hc<AppType>(...)` 動作、補完が効く状態
+- [ ] 既存の fetch 関数を hc ベースに書き換え(次回)
+- [ ] Try it の hc 移行(次回)

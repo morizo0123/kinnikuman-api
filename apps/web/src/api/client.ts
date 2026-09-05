@@ -1,3 +1,5 @@
+import { hc } from 'hono/client';
+import type { AppType } from 'api';
 import type {
   ChoujinDetail,
   ChoujinListItem,
@@ -5,6 +7,8 @@ import type {
   FactionListItem,
   PaginatedResponse
 } from './types';
+
+const client = hc<AppType>(import.meta.env.VITE_API_URL);
 
 // メタ情報付きレスポンスの型
 export type ApiResponse<T> = {
