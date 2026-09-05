@@ -41,7 +41,10 @@ const ErrorSchema = z.object({
 });
 
 const SlugParamSchema = z.object({
-  slug: z.string()
+  slug: z
+    .string()
+    .describe('軍団の一意な識別子(slug)')
+    .openapi({ example: 'seigi' })
 });
 
 // === List ===

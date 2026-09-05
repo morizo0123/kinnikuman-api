@@ -477,3 +477,246 @@ const SlugParamSchema = z.object({
 - 意味が違う(超人の slug と軍団の slug は概念別) → 独立
 
 今回は各ファイル独立で書いてる(責務が明確)。
+
+---
+
+## Swagger UI の統合
+
+### 必要なもの
+
+```ts
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { swaggerUI } from '@hono/swagger-ui';
+```
+
+### app 自体を OpenAPIHono にする(重要)
+
+```ts
+// Before(サブルートだけ OpenAPIHono)
+const app = new Hono();
+
+// After(トップレベルも OpenAPIHono)
+const app = new OpenAPIHono();
+```
+
+- `OpenAPIHono` は `Hono` の上位互換
+- 既存の `app.get('/', ...)` など全てそのまま動く
+- **トップレベルが OpenAPIHono でないと、全体のスキーマを収集できない**
+
+### OpenAPI JSON と Swagger UI の 2 つを追加
+
+```ts
+// 1. OpenAPI JSON 仕様書
+app.doc('/doc/openapi.json', {
+  openapi: '3.0.0',
+  info: {
+    version: '1.0.0',
+    title: 'KinnikumanAPI',
+    description: 'キン肉マンに登場するキャラクター情報の REST API'
+  }
+});
+
+// 2. Swagger UI
+app.get('/doc', swaggerUI({ url: '/doc/openapi.json' }));
+```
+
+### app.doc() の仕組み
+
+- アプリ全体の Zod スキーマと createRoute 情報を**自動収集**
+- OpenAPI 3.0 標準フォーマットに変換
+- 指定パスで JSON として配信
+- **これが Zod OpenAPI の真骨頂**、1行で仕様書が生成される
+
+### swaggerUI() の仕組み
+
+- Swagger UI 本体は CDN から配信
+- 内部で OpenAPI JSON を fetch して描画
+- リクエストの試行、レスポンス確認まで全部やってくれる
+
+### 慣習的なパス
+
+- `/doc`、`/docs`、`/swagger` あたりが定番
+- あなたのプロジェクトのフロント URL と被らないよう注意
+
+---
+
+## 説明を充実させる: .describe() と .openapi()
+
+### フィールドに説明を付ける
+
+```ts
+const QuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10)
+    .describe('1ページあたりの取得件数(1〜100)') // ← Zod 標準
+    .openapi({ example: 20 }), // ← OpenAPI 用
+  faction: z
+    .string()
+    .optional()
+    .describe('軍団 slug で絞り込み(例: seigi)')
+    .openapi({ example: 'seigi' })
+});
+```
+
+### .describe() の効果
+
+- Zod 標準のメソッド
+- Swagger UI で **パラメータの description** として表示
+- コード上のドキュメンテーションにもなる
+
+### .openapi({ example: ... }) の効果
+
+- `@hono/zod-openapi` が追加するメソッド
+- OpenAPI 仕様の「example」に相当
+- Swagger UI で **Try it out の初期値** にも入る
+- 触りやすさが激変する
+
+### チェーンの順序
+
+```ts
+z.string()
+  .optional()          // ← Zod のバリデーション系
+  .describe('...')     // ← 説明(表示用)
+  .openapi({...})      // ← OpenAPI メタ情報
+```
+
+バリデーション系を先、表示系を後、が読みやすい。
+
+---
+
+## createRoute の description
+
+`summary`(短い)と `description`(長い)の使い分け:
+
+```ts
+const route = createRoute({
+  summary: '超人一覧を取得', // 一覧で表示される短い名前
+  // 展開時に表示される詳細
+  description:
+    '登録されている全ての超人を、ページネーション付きで取得します。' +
+    '`faction` クエリを指定すると、特定の軍団に所属する超人のみに絞り込めます。'
+  // ...
+});
+```
+
+### description は Markdown が使える
+
+```ts
+description: `
+- \`limit\` で1ページあたりの件数を指定
+- \`offset\` でスキップ数を指定
+- \`faction\` で軍団絞り込み
+`,
+```
+
+- コードブロック、リンク、リスト、全部使える
+- **仕様書として読ませたい部分に投資する価値あり**
+
+---
+
+## レスポンスにも description
+
+```ts
+responses: {
+  200: {
+    content: {
+      'application/json': { schema: ChoujinDetailSchema },
+    },
+    description: '超人詳細を返す',   // ← ここ
+  },
+  404: {
+    content: {
+      'application/json': { schema: ErrorSchema },
+    },
+    description: '指定された slug の超人が存在しない場合',
+  },
+},
+```
+
+- 各ステータスコードごとに「何を意味するか」を書く
+- Swagger UI で綺麗に表示される
+- 「404 はどんな時?」がひと目で分かる
+
+---
+
+## 手書きドキュメント vs Swagger UI の比較
+
+Phase 6-8 で手作りしたドキュメント vs Swagger UI:
+
+|                        | 手作り(Phase 6-8)        | Swagger UI(Phase 9)             |
+| ---------------------- | ------------------------ | ------------------------------- |
+| デザインのカスタマイズ | 自由                     | 制限あり                        |
+| 実装                   | 自分で全部書く           | Zod スキーマから自動生成        |
+| 保守                   | 実装と仕様がズレる可能性 | **必ず同期**(1つのソース)       |
+| 対話性                 | 自分で Try it 実装       | 標準で付いてくる                |
+| 標準化                 | 自分ルール               | OpenAPI 3.0 標準                |
+| ツール連携             | 個別対応                 | Postman、Stoplight など多数対応 |
+
+### どっちを使う?
+
+- **一般公開のドキュメント**(ブランディング重要)→ 手作り
+- **開発者向けの仕様書**(正確さ重要)→ Swagger UI
+- **併存**が現実的な選択(実務でよくある)
+
+今回のプロジェクトは両方あるので、目的で使い分け:
+
+- `/docs/*` → 手作り(見せる)
+- `/doc` → Swagger UI(開発者向け)
+
+---
+
+## スキーマ駆動開発の全体像
+
+1つの Zod スキーマから得られるもの:
+
+Zod スキーマを1回書く
+├→ TypeScript の型(z.infer で自動)
+├→ ランタイムバリデーション(自動)
+├→ OpenAPI 仕様書(app.doc で自動)
+├→ Swagger UI(swaggerUI で自動)
+└→ (発展)クライアント SDK 生成(openapi-typescript 等)
+
+### 実務での価値
+
+- コードと仕様が **絶対にズレない**
+- ドキュメント作成が「実装したら自動で完成」
+- クライアント側の型定義も導出できる
+- 型安全性が仕様レベルで担保される
+
+これが「なぜスキーマ駆動が主流か」の答え。
+
+---
+
+## Phase 9 で学んだキーコンセプト
+
+### Zod
+
+- スキーマから型・バリデーション・変換を1つにまとめる
+- 「実行時に動く」→ 外部データの検証ができる
+- TypeScript の型と補完的な関係
+
+### Zod OpenAPI
+
+- `createRoute` で「仕様と実装を分離」
+- `c.req.valid('query')` で型付きデータ取得
+- `.describe()` `.openapi()` でメタ情報を追加
+
+### Swagger UI
+
+- 1つのスキーマから対話的な仕様書が自動生成
+- 開発者向けの標準ツール
+- 手作りドキュメントと併存できる
+
+---
+
+## Phase 9 全体の教訓
+
+**「1回書いたら全部が同期する仕組み」を作ると、後の保守がラクになる**
+
+- 手書きだと3箇所(型・バリデーション・ドキュメント)を維持
+- スキーマ駆動だと1箇所を維持
+- **DRY 原則の実践例**として、Zod スキーマ駆動開発は理想的

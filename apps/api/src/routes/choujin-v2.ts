@@ -7,16 +7,33 @@ const app = new OpenAPIHono();
 
 // 1. パラメータスキーマ
 const QuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(10),
-  offset: z.coerce.number().int().min(0).default(0),
-  faction: z.string().optional()
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10)
+    .describe('1ページあたりの取得件数(1〜100)')
+    .openapi({ example: 20 }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('スキップする件数(ページング用)')
+    .openapi({ example: 0 }),
+  faction: z
+    .string()
+    .optional()
+    .describe('軍団 slug で絞り込み(例: seigi)')
+    .openapi({ example: 'seigi' })
 });
 
 // 2. レスポンススキーマ
 const ChoujinItemSchema = z.object({
-  slug: z.string(),
-  name: z.string(),
-  url: z.string()
+  slug: z.string().describe('超人の識別子').openapi({ example: 'kinnikuman' }),
+  name: z.string().describe('超人名').openapi({ example: 'キン肉マン' }),
+  url: z.string().describe('詳細エンドポイントの URL')
 });
 
 const ListResponseSchema = z.object({
@@ -51,7 +68,10 @@ const ErrorSchema = z.object({
 
 // Path パラメータ用
 const SlugParamSchema = z.object({
-  slug: z.string()
+  slug: z
+    .string()
+    .describe('超人の一意な識別子(slug)')
+    .openapi({ example: 'kinnikuman' })
 });
 
 // 3. ルート定義(スキーマとハンドラを分離)
@@ -60,6 +80,9 @@ const route = createRoute({
   path: '/',
   tags: ['Choujin'],
   summary: '超人一覧を取得',
+  description:
+    '登録されている全ての超人を、ページネーション付きで取得します。' +
+    '`faction` クエリを指定すると、特定の軍団に所属する超人のみに絞り込めます。',
   request: {
     query: QuerySchema
   },
@@ -80,6 +103,8 @@ const detailRoute = createRoute({
   path: '/{slug}',
   tags: ['Choujin'],
   summary: '超人詳細を取得',
+  description:
+    '指定された slug の超人の詳細情報を取得します。所属軍団のリストも含みます。',
   request: {
     params: SlugParamSchema
   },
