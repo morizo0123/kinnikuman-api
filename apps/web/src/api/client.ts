@@ -44,38 +44,120 @@ async function apiFetch<T>(path: string): Promise<ApiResponse<T>> {
 }
 
 // === Choujin ===
-export function fetchChoujinList(params?: {
+export async function fetchChoujinList(params?: {
   limit?: number;
   offset?: number;
   faction?: string;
-}) {
-  const query = new URLSearchParams();
-  if (params?.limit !== undefined) query.set('limit', String(params.limit));
-  if (params?.offset !== undefined) query.set('offset', String(params.offset));
-  if (params?.faction) query.set('faction', params.faction);
+}): Promise<ApiResponse<PaginatedResponse<ChoujinListItem>>> {
+  const start = performance.now();
 
-  const queryString = query.toString();
-  const path = `/api/v1/choujin${queryString ? `?${queryString}` : ''}`;
+  const query: Record<string, string> = {};
+  if (params?.limit !== undefined) query.limit = String(params.limit);
+  if (params?.offset !== undefined) query.offset = String(params.offset);
+  if (params?.faction) query.faction = params.faction;
 
-  return apiFetch<PaginatedResponse<ChoujinListItem>>(path);
+  const res = await client.api.v2.choujin.$get({ query });
+
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = await res.json();
+  return {
+    data: data as PaginatedResponse<ChoujinListItem>,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
 }
 
-export function fetchChoujinDetail(slug: string) {
-  return apiFetch<ChoujinDetail>(`/api/v1/choujin/${slug}`);
+export async function fetchChoujinDetail(
+  slug: string
+): Promise<ApiResponse<ChoujinDetail>> {
+  const start = performance.now();
+
+  const res = await client.api.v2.choujin[':slug'].$get({
+    param: { slug }
+  });
+
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = await res.json();
+  return {
+    data: data as ChoujinDetail,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
 }
 
 // === Faction ===
-export function fetchFactionList(params?: { limit?: number; offset?: number }) {
-  const query = new URLSearchParams();
-  if (params?.limit !== undefined) query.set('limit', String(params.limit));
-  if (params?.offset !== undefined) query.set('offset', String(params.offset));
+export async function fetchFactionList(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ApiResponse<PaginatedResponse<FactionListItem>>> {
+  const start = performance.now();
 
-  const queryString = query.toString();
-  const path = `/api/v1/faction${queryString ? `?${queryString}` : ''}`;
+  const query: Record<string, string> = {};
+  if (params?.limit !== undefined) query.limit = String(params.limit);
+  if (params?.offset !== undefined) query.offset = String(params.offset);
 
-  return apiFetch<PaginatedResponse<FactionListItem>>(path);
+  const res = await client.api.v2.faction.$get({ query });
+
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = await res.json();
+  return {
+    data: data as PaginatedResponse<FactionListItem>,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
 }
 
-export function fetchFactionDetail(slug: string) {
-  return apiFetch<FactionDetail>(`/api/v1/faction/${slug}`);
+export async function fetchFactionDetail(
+  slug: string
+): Promise<ApiResponse<FactionDetail>> {
+  // return apiFetch<FactionDetail>(`/api/v1/faction/${slug}`);
+  const start = performance.now();
+
+  const res = await client.api.v2.faction[':slug'].$get({
+    param: { slug }
+  });
+
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = await res.json();
+  return {
+    data: data as FactionDetail,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
 }

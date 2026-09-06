@@ -954,3 +954,336 @@ Zod OpenAPI を導入した後、FE との型共有には 3 つの選択肢:
 - [x] FE で `const client = hc<AppType>(...)` 動作、補完が効く状態
 - [ ] 既存の fetch 関数を hc ベースに書き換え(次回)
 - [ ] Try it の hc 移行(次回)
+
+---
+
+## チェーン記法の徹底: Hono RPC の型伝搬
+
+### 問題の症状
+
+`hc<AppType>(...)` の `client` が **unknown 型** になる。
+`AppType` を確認すると `OpenAPIHono<Env, {}, "/">` みたいに中身が空。
+
+### 原因
+
+Hono の `.route()` や `.openapi()` は「元の型 + 追加ルートの型」を持つ**新しい型**を返す。
+戻り値を捨てると、**元の変数の型は変わらない**(TS の仕様)。
+
+```ts
+// NG: 戻り値を捨てている
+app.route('/api/v2/choujin', choujinV2Route);
+app.route('/api/v2/faction', factionV2Route);
+export type AppType = typeof app;
+// → AppType には何も型情報が入らない
+```
+
+### 解決: チェーン + const で受ける
+
+```ts
+const routes = app
+  .route('/api/v1/choujin', choujinRoute)
+  .route('/api/v2/choujin', choujinV2Route)
+  .route('/api/v2/faction', factionV2Route);
+
+export type AppType = typeof routes; // ← app じゃなく routes
+```
+
+### サブルーターも同じ問題
+
+`choujin-v2.ts` などのサブルーター内でも同じ:
+
+```ts
+// NG
+app.openapi(route, handler);
+app.openapi(detailRoute, detailHandler);
+export default app; // → 型情報が積まれていない
+
+// OK
+const routes = app.openapi(route, handler).openapi(detailRoute, detailHandler);
+export default routes;
+```
+
+### 3層構造の全ての層でチェーン必須
+
+```
+Layer 3: index.ts
+const routes = app.route().route().route()
+export type AppType = typeof routes
+
+Layer 2: 各サブルーター (choujin-v2.ts など)
+const routes = app.openapi().openapi()
+export default routes
+
+Layer 1: 各エンドポイント
+Zod スキーマから自動(ここは既に OK)
+```
+
+**どこか1箇所で戻り値を捨てると、そこから下の型情報が全部消える**。
+
+### 教訓
+
+Hono RPC は「戻り値を受け取るチェーン」を徹底しないと機能しない。
+これは Hono / tRPC 系フレームワーク独特の書き方で、慣れれば違和感なくなる。
+
+---
+
+## hc の呼び出し記法
+
+### Query の場合
+
+```ts
+client.api.v2.choujin.$get({
+  query: { limit: '20', faction: 'seigi' }
+});
+```
+
+- パスは**ドット記法**で辿る
+- HTTP メソッドは **`$get`, `$post`** など `$` プレフィックス
+- クエリは `query` プロパティのオブジェクト
+- 値は文字列(BE の `z.coerce.number()` が数値化)
+
+### Path Parameter の場合
+
+```ts
+client.api.v2.choujin[':slug'].$get({
+  param: { slug: 'kinnikuman' }
+});
+```
+
+- パスパラメータ部分は **`[':slug']` のブラケット記法**
+  - ドット記法だと `:` があるので構文エラー
+- **`param` は単数形**(慣習)
+
+### BE と FE の記法対応
+
+| BE (createRoute)           | FE (hc)                         |
+| -------------------------- | ------------------------------- |
+| `path: '/'`                | `.` (ルート)                    |
+| `path: '/{slug}'`          | `[':slug']`                     |
+| `request: { query: ... }`  | `.$get({ query: ... })`         |
+| `request: { params: ... }` | `.$get({ param: ... })` (単数!) |
+
+### 慣習の癖
+
+- BE の request は `params`(複数形)、valid の引数と hc の引数は `param`(単数形)
+- BE のパス指定は `{slug}` 中括弧、FE の呼び出しは `[':slug']` コロン付き
+- 歴史的経緯なので、パターンとして覚えるしかない
+
+---
+
+## hc ベースの fetch 関数例
+
+### Query パラメータのパターン
+
+```ts
+export async function fetchChoujinList(params?: {
+  limit?: number;
+  offset?: number;
+  faction?: string;
+}): Promise<ApiResponse<PaginatedResponse<ChoujinListItem>>> {
+  const start = performance.now();
+
+  // undefined を渡さないため、Record で組み立て
+  const query: Record<string, string> = {};
+  if (params?.limit !== undefined) query.limit = String(params.limit);
+  if (params?.offset !== undefined) query.offset = String(params.offset);
+  if (params?.faction) query.faction = params.faction;
+
+  const res = await client.api.v2.choujin.$get({ query });
+
+  const durationMs = Math.round(performance.now() - start);
+
+  if (!res.ok) {
+    const error = new Error(`API error: ${res.status} ${res.statusText}`);
+    (error as any).status = res.status;
+    (error as any).durationMs = durationMs;
+    throw error;
+  }
+
+  const data = await res.json();
+  return {
+    data: data as PaginatedResponse<ChoujinListItem>,
+    status: res.status,
+    statusText: res.statusText,
+    durationMs
+  };
+}
+```
+
+### Path Parameter のパターン
+
+```ts
+export async function fetchChoujinDetail(
+  slug: string
+): Promise<ApiResponse<ChoujinDetail>> {
+  const start = performance.now();
+
+  const res = await client.api.v2.choujin[':slug'].$get({
+    param: { slug }
+  });
+
+  const durationMs = Math.round(performance.now() - start);
+  // ... (以降 List と同じ)
+}
+```
+
+### 大事なポイント
+
+- `apiFetch` は使わない(hc が内部で fetch する)
+- performance.now() での計測、status 保持は自前で
+- レスポンス型は `as` で既存型にキャスト(hc の型推論と既存型が微妙にズレるため)
+
+---
+
+## hc の落とし穴: undefined 直渡し
+
+```ts
+// NG: 型エラーになる可能性
+client.api.v2.choujin.$get({
+  query: { limit: undefined }
+});
+```
+
+Zod スキーマで `.optional()` にしていても、呼び出し側で `undefined` を明示するとエラー扱いになることがある。
+
+### 対処: Record<string, string> で組み立て
+
+```ts
+const query: Record<string, string> = {};
+if (params?.limit !== undefined) query.limit = String(params.limit);
+```
+
+「値がある時だけキーをセット」。**キー自体を無くす**のがコツ。
+
+---
+
+## v1 と v2 の hc での違い
+
+hc が型を提供するのは **Zod OpenAPI で定義されたルートだけ**。
+v1 の普通の `app.get(...)` は型が薄い(`BlankSchema` 扱い)。
+
+```ts
+// v2: 型補完がっつり
+client.api.v2.choujin.$get({ query: {...} })
+
+// v1: 型は薄い(hc の恩恵少ない)
+client.api.v1.choujin.$get(...)
+```
+
+→ hc の恩恵を受けたいなら、v2(Zod OpenAPI 版)を叩くのが正解。
+
+---
+
+## ポート衝突と Vite 設定
+
+### 複数プロジェクトで Vite の 5173 が被る問題
+
+```ts
+// apps/web/vite.config.ts
+export default defineConfig({
+  plugins: [...],
+  server: {
+    port: 5273,        // ← 好きな番号
+    strictPort: true,  // ← 使用中ならエラーで起動失敗
+  },
+  // ...
+})
+```
+
+### strictPort の意味
+
+- **無効(デフォルト)**: 使用中なら次の番号を試す(5174, 5175...)
+- **有効**: 使用中ならエラー → 意図せず違うポートで起動するのを防ぐ
+
+CORS 設定と絡む場面では **strictPort: true を強く推奨**。
+「動くけど CORS で謎に弾かれる」という混乱を避けられる。
+
+### BE の CORS も追従
+
+```ts
+// apps/api/src/index.ts
+app.use(
+  '/*',
+  cors({
+    origin: 'http://localhost:5273' // ← FE の新ポートに追従
+  })
+);
+```
+
+複数許可も可能:
+
+```ts
+origin: ['http://localhost:5273', 'http://localhost:5173'];
+```
+
+### 開発環境設定の教訓
+
+- 最初にポート・パスを固めておく
+- チーム開発なら README に明記
+- ポートは覚えやすい語呂で(5273 = キン肉的な)
+
+---
+
+## Step 9-6 の全体進捗
+
+- [x] BE で `export type AppType = typeof routes`(チェーン重要)
+- [x] FE で `pnpm add hono` と `pnpm add 'api@workspace:*'`
+- [x] apps/api/package.json に `exports` 追加
+- [x] FE で `const client = hc<AppType>(...)` で補完が効く
+- [x] fetchChoujinList を hc ベースに書き換え
+- [x] fetchChoujinDetail を hc ベースに(Path Param パターン)
+- [x] fetchFactionList, fetchFactionDetail も同様に
+- [x] ポート整理と CORS 設定
+
+--
+
+## Step 9-6 の達成した状態
+
+```
+BE (apps/api)
+Zod スキーマ書く
+↓
+createRoute + app.openapi()
+↓
+const routes = app.route().route()... (チェーン重要!)
+↓
+export type AppType = typeof routes
+↓
+apps/api/package.json の exports 経由で共有
+↓
+FE (apps/web)
+import type { AppType } from 'api'
+↓
+const client = hc<AppType>(url)
+↓
+client.api.v2.choujin.$get({...}) ← 型補完バッチリ
+```
+
+- ✅ BE の Zod スキーマから FE の型付きクライアントが自動生成
+- ✅ 手書きの型定義ゼロ
+- ✅ BE を変えれば FE の補完が自動追従
+- ✅ **フルスタック TypeScript の真骨頂**を体感
+
+---
+
+## Phase 9 全体の教訓
+
+### スキーマ駆動 + 型共有の全体像
+
+1. **Zod スキーマ** = ソースオブトゥルース(1つの真実)
+2. **バリデーション**、**型**、**OpenAPI ドキュメント**が自動導出
+3. **Hono RPC** で FE まで型が届く
+4. すべての層で「同じ情報が別の形」
+
+### なぜ現代の主流か
+
+- 型と実装のズレが起きない(仕様書と実装が同じ)
+- BE の変更が FE のビルドエラーで検知される
+- ドキュメント作成のコストがゼロ
+- リファクタリングが安全
+
+### tRPC / Nuxt / Remix なども同じ思想
+
+- 「BE と FE の型を統合する」流れは、今の Web 開発の最先端の1つ
+- TypeScript の力を最大限に活かした設計
+- Phase 9 で体感したことは、これらの他フレームワークでも活きる

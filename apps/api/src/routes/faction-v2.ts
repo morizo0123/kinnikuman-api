@@ -47,7 +47,7 @@ const SlugParamSchema = z.object({
     .openapi({ example: 'seigi' })
 });
 
-// === List ===
+// === ルート定義 ===
 const listRoute = createRoute({
   method: 'get',
   path: '/',
@@ -62,38 +62,6 @@ const listRoute = createRoute({
   }
 });
 
-app.openapi(listRoute, async (c) => {
-  const { limit, offset } = c.req.valid('query');
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(faction);
-
-  const rows = await db.select().from(faction).limit(limit).offset(offset);
-
-  const baseUrl = '/api/v2/faction';
-  const next =
-    offset + limit < count
-      ? `${baseUrl}?limit=${limit}&offset=${offset + limit}`
-      : null;
-  const previous =
-    offset > 0
-      ? `${baseUrl}?limit=${limit}&offset=${Math.max(offset - limit, 0)}`
-      : null;
-
-  return c.json({
-    count,
-    next,
-    previous,
-    results: rows.map((row) => ({
-      slug: row.slug,
-      name: row.name,
-      url: `/api/v2/faction/${row.slug}`
-    }))
-  });
-});
-
-// === Detail ===
 const detailRoute = createRoute({
   method: 'get',
   path: '/{slug}',
@@ -112,34 +80,66 @@ const detailRoute = createRoute({
   }
 });
 
-app.openapi(detailRoute, async (c) => {
-  const { slug } = c.req.valid('param');
+// === ハンドラで実装 ===
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const { limit, offset } = c.req.valid('query');
 
-  const row = await db.query.faction.findFirst({
-    where: eq(faction.slug, slug),
-    with: {
-      choujins: {
-        with: { choujin: true }
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(faction);
+
+    const rows = await db.select().from(faction).limit(limit).offset(offset);
+
+    const baseUrl = '/api/v2/faction';
+    const next =
+      offset + limit < count
+        ? `${baseUrl}?limit=${limit}&offset=${offset + limit}`
+        : null;
+    const previous =
+      offset > 0
+        ? `${baseUrl}?limit=${limit}&offset=${Math.max(offset - limit, 0)}`
+        : null;
+
+    return c.json({
+      count,
+      next,
+      previous,
+      results: rows.map((row) => ({
+        slug: row.slug,
+        name: row.name,
+        url: `/api/v2/faction/${row.slug}`
+      }))
+    });
+  })
+  .openapi(detailRoute, async (c) => {
+    const { slug } = c.req.valid('param');
+
+    const row = await db.query.faction.findFirst({
+      where: eq(faction.slug, slug),
+      with: {
+        choujins: {
+          with: { choujin: true }
+        }
       }
+    });
+
+    if (!row) {
+      return c.json({ error: 'Faction not found' }, 404);
     }
+
+    return c.json(
+      {
+        slug: row.slug,
+        name: row.name,
+        choujins: row.choujins.map((cf) => ({
+          slug: cf.choujin.slug,
+          name: cf.choujin.name,
+          url: `/api/v2/choujin/${cf.choujin.slug}`
+        }))
+      },
+      200
+    );
   });
 
-  if (!row) {
-    return c.json({ error: 'Faction not found' }, 404);
-  }
-
-  return c.json(
-    {
-      slug: row.slug,
-      name: row.name,
-      choujins: row.choujins.map((cf) => ({
-        slug: cf.choujin.slug,
-        name: cf.choujin.name,
-        url: `/api/v2/choujin/${cf.choujin.slug}`
-      }))
-    },
-    200
-  );
-});
-
-export default app;
+export default routes;
